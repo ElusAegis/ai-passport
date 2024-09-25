@@ -1,2 +1,4 @@
-/origin_certificate.json
-/proof.json
+/target
+
+/model/*.json
+!/model/input.json

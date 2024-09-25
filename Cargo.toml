@@ -1,0 +1,46 @@
+[package]
+name = "passport-for-ai"
+version = "0.1.0"
+edition = "2021"
+default-run = "passport-for-ai"
+
+[lib]
+name = "passport_for_ai"
+
+[dependencies]
+clap = { version = "4.0", features = ["derive"] }
+sha2 = "0.10"
+hex = "0.4"
+
+# Local AI Passport dependencies
+ezkl = { git = "https://github.com/zkonduit/ezkl.git", tag = "v13.0.2", optional = true }
+temp-dir = "0.1"
+chrono = { version = "0.4", features = ["alloc", "now"], default-features = false }
+tokio = { version = "1.40", features = ["rt", "rt-multi-thread", "macros"] }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+
+# Remote AI Passport dependencies
+tlsn-core = { git = "https://github.com/tlsnotary/tlsn", package = "tlsn-core", tag = "v0.1.0-alpha.6", optional = true }
+tlsn-prover = { git = "https://github.com/tlsnotary/tlsn", package = "tlsn-prover", tag = "v0.1.0-alpha.6", optional = true }
+tlsn-verifier = { git = "https://github.com/tlsnotary/tlsn", package = "tlsn-verifier", tag = "v0.1.0-alpha.6", optional = true }
+
+[features]
+default = ["local"]
+local = ["ezkl"]
+remote = ["tlsn-core"]
+
+
+[[bin]]
+name = "passport-for-ai"
+path = "src/bin/passport_for_ai.rs"
+
+
+
+# We need to patch the following two URLs to have a consistent version throughout the project
+[patch.'https://github.com/zkonduit/halo2']
+halo2_proofs = { git = "https://github.com/zkonduit//halo2.git", package = "halo2_proofs", branch = "ac/cache-lookup-commitments" }
+
+# We need to also patch the halo2_proofs with the following URL as it is hardcoded in `ezkl` dependency list
+[patch.'https://github.com/zkonduit/halo2?branch=ac/cache-lookup-commitments#8b13a0d2a7a34d8daab010dadb2c47dfa47d37d0']
+halo2_proofs = { git = "https://github.com/zkonduit//halo2.git", package = "halo2_proofs", branch = "ac/cache-lookup-commitments" }
