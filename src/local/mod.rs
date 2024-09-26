@@ -1,7 +1,7 @@
-mod prove_attribution;
 mod create_model_passport;
-mod verify_attribution;
 mod ezkl;
+mod prove_attribution;
+mod verify_attribution;
 
 pub use create_model_passport::create_model_passport;
 pub use prove_attribution::prove_attribution;
@@ -25,7 +25,9 @@ fn hash_file_content(file_path: &Path) -> Result<String, Box<dyn std::error::Err
 fn hash_settings_file_content(file_path: &Path) -> Result<String, Box<dyn std::error::Error>> {
     let settings_data = fs::read_to_string(file_path)?;
     let settings_json: serde_json::Value = serde_json::from_str(&settings_data)?;
-    let settings_json = settings_json.as_object().ok_or("Error parsing settings JSON")?;
+    let settings_json = settings_json
+        .as_object()
+        .ok_or("Error parsing settings JSON")?;
     let mut settings_json = settings_json.clone();
     settings_json.remove("timestamp");
     let settings_json = serde_json::to_string(&settings_json)?;
@@ -35,16 +37,23 @@ fn hash_settings_file_content(file_path: &Path) -> Result<String, Box<dyn std::e
 }
 
 /// Function to generate the model identity
-fn generate_model_identity(model_path: Option<&Path>, weights_hash: Option<String>, settings_path: &Path, vk_path: &Path) -> Result<IdentityDetails, Box<dyn std::error::Error>> {
-    let vk_hash = hash_file_content(&vk_path).map_err(|e| format!("Error generating VK hash: {}", e))?;
-    let settings_hash = hash_settings_file_content(&settings_path).map_err(|e| format!("Error generating settings hash: {}", e))?;
+fn generate_model_identity(
+    model_path: Option<&Path>,
+    weights_hash: Option<String>,
+    settings_path: &Path,
+    vk_path: &Path,
+) -> Result<IdentityDetails, Box<dyn std::error::Error>> {
+    let vk_hash =
+        hash_file_content(vk_path).map_err(|e| format!("Error generating VK hash: {}", e))?;
+    let settings_hash = hash_settings_file_content(settings_path)
+        .map_err(|e| format!("Error generating settings hash: {}", e))?;
 
     let weights_hash = if let Some(model_path) = model_path {
         hash_file_content(model_path).map_err(|e| format!("Error generating model hash: {}", e))?
     } else {
         weights_hash.expect("Weights hash or model path must be provided")
     };
-    
+
     Ok(IdentityDetails {
         vk_hash,
         settings_hash,

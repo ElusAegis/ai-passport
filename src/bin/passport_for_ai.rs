@@ -111,7 +111,9 @@ async fn main() -> Result<(), Box<dyn Error>> {
         let save_to_path = matches.get_one::<String>("save_to_path").map(Path::new);
 
         if matches.get_flag("local") {
-            local::create_model_passport(model_path, save_to_path).await.map_err(|err| format!("Error generating model passport: {err}"))?;
+            local::create_model_passport(model_path, save_to_path)
+                .await
+                .map_err(|err| format!("Error generating model passport: {err}"))?;
         } else if matches.get_flag("remote") {
             eprintln!("Error: Remote models are not implemented yet.");
             std::process::exit(1);
@@ -125,7 +127,9 @@ async fn main() -> Result<(), Box<dyn Error>> {
         let save_to_path = matches.get_one::<String>("save_to_path").map(Path::new);
 
         if matches.get_flag("local") {
-            local::prove_attribution(model_path, content_path, save_to_path).await.map_err(|err| format!("Error attributing content to the model: {err}"))?;
+            local::prove_attribution(model_path, content_path, save_to_path)
+                .await
+                .map_err(|err| format!("Error attributing content to the model: {err}"))?;
         } else if matches.get_flag("remote") {
             eprintln!("Error: Remote models are not supported yet.");
             std::process::exit(1);
@@ -134,13 +138,19 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
     // Handle `verify-attribution` command
     if let Some(matches) = matches.subcommand_matches("verify-attribution") {
-        let model_passport_path = Path::new(matches.get_one::<String>("model_passport_path").unwrap());
-        let attribution_certificate_path = Path::new(matches.get_one::<String>("attribution_certificate_path").unwrap());
+        let model_passport_path =
+            Path::new(matches.get_one::<String>("model_passport_path").unwrap());
+        let attribution_certificate_path = Path::new(
+            matches
+                .get_one::<String>("attribution_certificate_path")
+                .unwrap(),
+        );
 
         // Call the verify function
-        local::verify_attribution(model_passport_path, attribution_certificate_path).await.map_err(|err| format!("Error verifying attribution: {err}"))?;
+        local::verify_attribution(model_passport_path, attribution_certificate_path)
+            .await
+            .map_err(|err| format!("Error verifying attribution: {err}"))?;
     }
 
     Ok(())
 }
-

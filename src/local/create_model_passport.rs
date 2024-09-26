@@ -26,16 +26,27 @@ struct ModelPassport {
 
 impl ModelPassport {
     pub fn short_id(&self) -> String {
-        format!("{}_{}", &self.model_metadata.name, &self.model_identity_hash[0..10])
+        format!(
+            "{}_{}",
+            &self.model_metadata.name,
+            &self.model_identity_hash[0..10]
+        )
     }
 }
 
-pub async fn create_model_passport(model_path: &Path, save_to_path: Option<&Path>) -> Result<(), Box<dyn Error>> {
+pub async fn create_model_passport(
+    model_path: &Path,
+    save_to_path: Option<&Path>,
+) -> Result<(), Box<dyn Error>> {
     if !model_path.exists() {
         return Err(std::io::Error::new(
             ErrorKind::InvalidData,
-            format!("Model file not found at '{}'. Please provide a valid file path.", model_path.display()),
-        ).into());
+            format!(
+                "Model file not found at '{}'. Please provide a valid file path.",
+                model_path.display()
+            ),
+        )
+        .into());
     }
 
     if !is_valid_onnx_path(model_path) {
@@ -58,13 +69,21 @@ pub async fn create_model_passport(model_path: &Path, save_to_path: Option<&Path
     let pk_path = tmp_dir_path.join("pk.key");
     let vk_path = tmp_dir_path.join("vk.key");
 
-    generate_circuit_settings(model_path, &settings_path).await.map_err(|e| format!("Error generating model's settings: {}", e))?;
-    get_srs(&settings_path, &srs_path).await.map_err(|e| format!("Error generating SRS: {}", e))?;
-    compile_circuit(model_path, &settings_path, &compiled_model_path).await.map_err(|e| format!("Error compiling the model: {}", e))?;
-    setup_keys(&compiled_model_path, &srs_path, &pk_path, &vk_path).await.map_err(|e| format!("Error setting up model keys: {}", e))?;
+    generate_circuit_settings(model_path, &settings_path)
+        .await
+        .map_err(|e| format!("Error generating model's settings: {}", e))?;
+    get_srs(&settings_path, &srs_path)
+        .await
+        .map_err(|e| format!("Error generating SRS: {}", e))?;
+    compile_circuit(model_path, &settings_path, &compiled_model_path)
+        .await
+        .map_err(|e| format!("Error compiling the model: {}", e))?;
+    setup_keys(&compiled_model_path, &srs_path, &pk_path, &vk_path)
+        .await
+        .map_err(|e| format!("Error setting up model keys: {}", e))?;
 
-
-    let model_identity = generate_model_identity(Some(model_path), None, &settings_path, &vk_path).map_err(|e| format!("Error generating model identity: {}", e))?;
+    let model_identity = generate_model_identity(Some(model_path), None, &settings_path, &vk_path)
+        .map_err(|e| format!("Error generating model identity: {}", e))?;
 
     // Get current date and time
     let current_date = Local::now().format("%Y-%m-%d %H:%M:%S").to_string();
@@ -74,16 +93,22 @@ pub async fn create_model_passport(model_path: &Path, save_to_path: Option<&Path
     let model_size = metadata.len();
 
     // Create model metadata with default values
-    let file_name = model_path.file_stem().and_then(|name| name.to_str()).map(|name| name.to_string()).expect("Error getting model name");
+    let file_name = model_path
+        .file_stem()
+        .and_then(|name| name.to_str())
+        .map(|name| name.to_string())
+        .expect("Error getting model name");
     let model_metadata = ModelMetadata {
-        name: file_name,       // Default to file name of the model
-        description: None,    // Default to None
-        author: None,         // Default to None
+        name: file_name,   // Default to file name of the model
+        description: None, // Default to None
+        author: None,      // Default to None
         size_bytes: model_size,
-        source_url: None,     // Default to None
+        source_url: None, // Default to None
     };
 
-    let model_identity_hash = model_identity.unique_indentifier().map_err(|e| format!("Error hashing model identity: {}", e))?;
+    let model_identity_hash = model_identity
+        .unique_indentifier()
+        .map_err(|e| format!("Error hashing model identity: {}", e))?;
 
     // Create the model passport
     let model_passport = ModelPassport {
@@ -112,7 +137,10 @@ pub async fn create_model_passport(model_path: &Path, save_to_path: Option<&Path
 
     std::fs::write(&output_file, passport_json).expect("Unable to write passport to file");
 
-    println!("Note: The model passport has been saved to '{}'.", output_file.display());
+    println!(
+        "Note: The model passport has been saved to '{}'.",
+        output_file.display()
+    );
 
     Ok(())
 }
