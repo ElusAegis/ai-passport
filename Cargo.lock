@@ -4254,13 +4254,14 @@ dependencies = [
 name = "passport-for-ai"
 version = "0.1.0"
 dependencies = [
+ "base64 0.22.1",
  "chrono",
  "clap",
  "ezkl",
  "hex",
  "serde",
  "serde_json",
- "sha2",
+ "sha3 0.10.8",
  "temp-dir",
  "tlsn-core",
  "tlsn-prover",

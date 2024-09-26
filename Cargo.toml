@@ -9,7 +9,7 @@ name = "passport_for_ai"
 
 [dependencies]
 clap = { version = "4.0", features = ["derive"] }
-sha2 = "0.10"
+sha3 = "0.10"
 hex = "0.4"
 
 # Local AI Passport dependencies
@@ -24,6 +24,7 @@ serde_json = "1.0"
 tlsn-core = { git = "https://github.com/tlsnotary/tlsn", package = "tlsn-core", tag = "v0.1.0-alpha.6", optional = true }
 tlsn-prover = { git = "https://github.com/tlsnotary/tlsn", package = "tlsn-prover", tag = "v0.1.0-alpha.6", optional = true }
 tlsn-verifier = { git = "https://github.com/tlsnotary/tlsn", package = "tlsn-verifier", tag = "v0.1.0-alpha.6", optional = true }
+base64 = "0.22.1"
 
 [features]
 default = ["local"]

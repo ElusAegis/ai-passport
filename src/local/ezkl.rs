@@ -1,10 +1,16 @@
 use ezkl::commands::Commands;
 use ezkl::execute::run;
+use ezkl::graph::Visibility;
 use ezkl::{EZKLError, RunArgs};
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
 // Function to generate circuit settings
 pub(super) async fn generate_circuit_settings(model_path: &Path, settings_path: &Path) -> Result<String, EZKLError> {
+    let mut settings_args = RunArgs::default();
+    settings_args.input_visibility = Visibility::Public;
+    settings_args.output_visibility = Visibility::Public;
+    settings_args.param_visibility = Visibility::Hashed { hash_is_public: true, outlets: vec![] };
+
     let gen_settings_command = Commands::GenSettings {
         model: Some(model_path.to_path_buf()),
         settings_path: Some(settings_path.to_path_buf()),
@@ -74,12 +80,12 @@ pub(super) async fn generate_proof(compiled_circuit_path: &Path, pk_path: &Path,
 }
 
 // Function to verify the proof
-pub(super) async fn verify_proof(proof_path: &Path, settings_path: PathBuf, srs_path: PathBuf, vk_path: PathBuf) -> Result<String, EZKLError> {
+pub(super) async fn verify_proof(proof_path: &Path, settings_path: &Path, vk_path: &Path) -> Result<String, EZKLError> {
     let verify_command = Commands::Verify {
-        settings_path: Some(settings_path),
+        settings_path: Some(settings_path.to_path_buf()),
         proof_path: Some(proof_path.to_path_buf()),
-        vk_path: Some(vk_path),
-        srs_path: Some(srs_path),
+        vk_path: Some(vk_path.to_path_buf()),
+        srs_path: None,
         reduced_srs: Some(false),
     };
     run(verify_command).await
