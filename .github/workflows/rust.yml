@@ -1,0 +1,58 @@
+name: Rust CI
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  build:
+
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v2
+
+    - name: Install Rust
+      uses: actions-rs/toolchain@v1
+      with:
+        toolchain: nightly
+        components: clippy, rustfmt
+
+    - name: Check code formatting
+      run: cargo fmt -- --check
+
+    - name: Run Clippy
+      run: cargo clippy -- -D warnings
+
+    - name: Build the project
+      run: cargo build
+
+    - name: Run Tests
+      run: cargo test
+
+  test:
+
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v2
+
+    - name: Install Rust
+      uses: actions-rs/toolchain@v1
+      with:
+        toolchain: nightly
+
+    - name: Run `create-passport`
+      run: cargo run --release -- create-passport --local model/network.onnx --save-to ./model
+
+    - name: Run `attribute-content`
+      run: cargo run --release -- attribute-content --local model/network.onnx model/input.json --save-to ./model
+
+    - name: Run `verify-attribution`
+      run: cargo run --release -- verify-attribution model/model_network_db9e2eef_passport.json model/model_db9e2eef_attribution_certificate.json
