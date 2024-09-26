@@ -29,7 +29,7 @@ impl ModelPassport {
         format!(
             "{}_{}",
             &self.model_metadata.name,
-            &self.model_identity_hash[0..10]
+            &self.model_identity_hash[0..8]
         )
     }
 }
@@ -46,7 +46,7 @@ pub async fn create_model_passport(
                 model_path.display()
             ),
         )
-        .into());
+            .into());
     }
 
     if !is_valid_onnx_path(model_path) {
