@@ -163,7 +163,7 @@ Verify the cryptographic proof and ensure that the output is genuinely produced 
 **Command**:
 
 ```bash
-cargo run --release -- verify-attribution model/network.onnx model/model_network_<model_hash>_passport.json model/model_<model_hash>_attribution_certificate.json
+cargo run --release -- verify-attribution model/model_network_db9e2eef_passport.json model/model_db9e2eef_attribution_certificate.json
 ```
 
 **Explanation**:
