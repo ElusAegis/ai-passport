@@ -9,32 +9,49 @@ name = "passport_for_ai"
 
 [dependencies]
 clap = { version = "4.0", features = ["derive"] }
-sha3 = "0.10"
 hex = "0.4"
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+tokio = { version = "1.40", features = ["rt", "rt-multi-thread", "macros"] }
+chrono = { version = "0.4", features = ["alloc", "now"], default-features = false }
 
 # Local AI Passport dependencies
 ezkl = { git = "https://github.com/zkonduit/ezkl.git", tag = "v13.0.2", optional = true }
-temp-dir = "0.1"
-chrono = { version = "0.4", features = ["alloc", "now"], default-features = false }
-tokio = { version = "1.40", features = ["rt", "rt-multi-thread", "macros"] }
-serde = { version = "1.0", features = ["derive"] }
-serde_json = "1.0"
+temp-dir = { version = "0.1", optional = true }
+sha3 = { version = "0.10", optional = true }
+base64 = { version = "0.22.1", optional = true }
 
 # Remote AI Passport dependencies
 tlsn-core = { git = "https://github.com/tlsnotary/tlsn", package = "tlsn-core", tag = "v0.1.0-alpha.6", optional = true }
-tlsn-prover = { git = "https://github.com/tlsnotary/tlsn", package = "tlsn-prover", tag = "v0.1.0-alpha.6", optional = true }
+tlsn-prover = { git = "https://github.com/tlsnotary/tlsn", package = "tlsn-prover", tag = "v0.1.0-alpha.6", optional = true, features = ["formats"] }
 tlsn-verifier = { git = "https://github.com/tlsnotary/tlsn", package = "tlsn-verifier", tag = "v0.1.0-alpha.6", optional = true }
-base64 = "0.22.1"
+tlsn-formats = { git = "https://github.com/tlsnotary/tlsn", package = "tlsn-formats", tag = "v0.1.0-alpha.6", optional = true }
+notary-client = { git = "https://github.com/tlsnotary/tlsn", package = "notary-client", tag = "v0.1.0-alpha.6", optional = true }
+spansy = { git = "https://github.com/tlsnotary/tlsn-utils", package = "spansy", rev = "45370cc", optional = true }
+dotenv = { version = "0.15.0", optional = true }
+hyper = { version = "1.1", features = ["client", "http1"], optional = true }
+hyper-util = { version = "0.1", features = ["full"], optional = true }
+http-body-util = { version = "0.1.2", optional = true }
+tokio-util = { version = "0.7", optional = true }
+
+tracing = { version = "0.1", optional = true }
+tracing-subscriber = { version = "0.3", optional = true }
 
 [features]
-default = ["local"]
-local = ["ezkl"]
-remote = ["tlsn-core"]
+default = ["remote"]
+local = ["ezkl", "temp-dir", "sha3", "base64"]
+remote = ["tlsn-core", "tlsn-prover", "tlsn-verifier", "notary-client", "dotenv", "hyper", "hyper-util", "http-body-util", "tokio-util", "tracing", "tracing-subscriber", "spansy", "tlsn-formats"]
 
 
 [[bin]]
 name = "passport-for-ai"
 path = "src/bin/passport_for_ai.rs"
+
+
+[[bin]]
+name = "claud-reply"
+path = "src/bin/claud_reply.rs"
+required-features = ["remote"]
 
 
 
