@@ -50,7 +50,7 @@ async fn main() {
         let mut user_message = String::new();
         if request_index == 1 {
             user_message = SETUP_PROMPT.to_string();
-            debug!("Sending setup prompt to OpenAI API: {}", user_message);
+            debug!("Sending setup prompt to Antropic API: {}", user_message);
             // TODO - consider how to make it optional and not get a timeout error
         } else {
             // Prompt the user to provide a message to send to the assistant
@@ -73,7 +73,7 @@ async fn main() {
 
         messages.push(user_message);
 
-        // Prepare the Request to send to the OpenAI API
+        // Prepare the Request to send to the Antropic API
         let request = generate_request(&mut messages, &api_key);
 
         // Collect the sent private data
@@ -85,11 +85,11 @@ async fn main() {
 
         debug!("Request {request_index}: {:?}", request);
 
-        debug!("Sending request {request_index} to OpenAI API...");
+        debug!("Sending request {request_index} to Antropic API...");
 
         let response = request_sender.send_request(request).await.unwrap();
 
-        debug!("Received response {request_index} from OpenAI");
+        debug!("Received response {request_index} from Antropic");
 
         debug!("Raw response {request_index}: {:?}", response);
 
@@ -120,7 +120,7 @@ async fn main() {
             serde_json::to_string_pretty(&parsed).unwrap()
         );
 
-        debug!("Request {request_index} to OpenAI succeeded");
+        debug!("Request {request_index} to Antropic succeeded");
 
         let received_assistant_message =
             json!({"role": "assistant", "content": parsed["content"][0]["text"]});
@@ -129,53 +129,12 @@ async fn main() {
         request_index += 1;
     }
 
-    debug!("Conversation ended, sending final request to OpenAI API to shut down the session...");
+    // Shutdown the connection by sending a final dummy request to the API
+    shutdown_connection(prover_ctrl, &mut request_sender, &mut recv_private_data).await;
 
-    // Prepare final request to close the session
-    let close_connection_request = hyper::Request::builder()
-        .method(Method::POST)
-        .uri(ROUTE) // The same endpoint you're working with
-        .header(HOST, SERVER_DOMAIN)
-        .header("Accept-Encoding", "identity")
-        .header(CONNECTION, "close") // This will instruct the server to close the connection
-        .header(CONTENT_TYPE, "application/json")
-        .header("x-api-key", api_key.clone())
-        .header("anthropic-version", "2023-06-01")
-        .body(String::new())
-        .unwrap();
-
-    debug!("Sending final request to OpenAI API...");
-
-    // As this is the last request, we can defer decryption until the end.
-    prover_ctrl.defer_decryption().await.unwrap();
-
-    let shutdown_response = request_sender
-        .send_request(close_connection_request)
-        .await
-        .unwrap();
-
-    // Collect the body
-    let payload = shutdown_response
-        .into_body()
-        .collect()
-        .await
-        .unwrap()
-        .to_bytes();
-
-    let parsed =
-        serde_json::from_str::<serde_json::Value>(&String::from_utf8_lossy(&payload)).unwrap();
-
-    // Pretty printing the response
-    // TODO - do another shutdown request that doesn't return an error
-    debug!(
-        "Shutdown response (expeted error): {}",
-        serde_json::to_string_pretty(&parsed).unwrap()
-    );
-
+    // Notarize the session
     let (sent_commitment_ids, received_commitment_ids, notarized_session) =
         notirise_session(prover_task, &mut recv_private_data, &mut sent_private_data).await;
-
-    debug!("Notarization complete!");
 
     // Build the proof
 
@@ -192,6 +151,57 @@ async fn main() {
     file.write_all(serde_json::to_string_pretty(&proof).unwrap().as_bytes())
         .await
         .unwrap();
+}
+
+async fn shutdown_connection(
+    prover_ctrl: ProverControl,
+    request_sender: &mut SendRequest<String>,
+    mut recv_private_data: &mut Vec<Vec<u8>>,
+) {
+    debug!("Conversation ended, sending final request to Antropic API to shut down the session...");
+
+    // Prepare final request to close the session
+    let close_connection_request = hyper::Request::builder()
+        .header(HOST, SERVER_DOMAIN)
+        .header("Accept-Encoding", "identity")
+        .header(CONNECTION, "close") // This will instruct the server to close the connection
+        .body(String::new())
+        .unwrap();
+
+    debug!("Sending final request to Antropic API...");
+
+    // As this is the last request, we can defer decryption until the end.
+    prover_ctrl.defer_decryption().await.unwrap();
+
+    let response = request_sender
+        .send_request(close_connection_request)
+        .await
+        .unwrap();
+
+    // Collect the received private data
+    extract_private_data(
+        &mut recv_private_data,
+        response.headers(),
+        RESPONSE_TOPICS_TO_CENSOR.as_slice(),
+    );
+
+    // Collect the body
+    let payload = response.into_body().collect().await.unwrap().to_bytes();
+
+    let parsed =
+        serde_json::from_str::<serde_json::Value>(&String::from_utf8_lossy(&payload)).unwrap();
+
+    // Pretty printing the response
+    debug!(
+        "Shutdown response (error response is expected ): {}",
+        serde_json::to_string_pretty(&parsed).unwrap()
+    );
+
+    // Pretty printing the response
+    debug!(
+        "Shutdown response (error response is expected ): {}",
+        serde_json::to_string_pretty(&parsed).unwrap()
+    );
 }
 
 fn build_proof(
@@ -261,6 +271,9 @@ async fn notirise_session(
 
     // Finalize, returning the notarized session
     let notarized_session = prover.finalize().await.unwrap();
+
+    debug!("Notarization complete!");
+
     (
         sent_commitment_ids,
         recived_commitment_ids,
@@ -320,7 +333,7 @@ async fn setup_connections() -> (
 ) {
     tracing_subscriber::fmt::init();
 
-    // Load secret variables from environment for OpenAI API connection
+    // Load secret variables from environment for Antropic API connection
     dotenv::dotenv().ok();
     let api_key = env::var("ANTHROPIC_API_KEY").expect("ANTHROPIC_API_KEY must be set");
 
@@ -394,7 +407,7 @@ fn generate_request(
     json_body.insert("messages".to_string(), messages);
     let json_body = serde_json::Value::Object(json_body);
 
-    // Build the HTTP request to send the prompt to OpenAI API
+    // Build the HTTP request to send the prompt to Antropic API
     hyper::Request::builder()
         .method(Method::POST)
         .uri(ROUTE)
