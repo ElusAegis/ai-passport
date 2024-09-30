@@ -134,7 +134,7 @@ async fn main() {
 
     // Notarize the session
     let (sent_commitment_ids, received_commitment_ids, notarized_session) =
-        notirise_session(prover_task, &mut recv_private_data, &mut sent_private_data).await;
+        notirise_session(prover_task, &recv_private_data, &sent_private_data).await;
 
     // Build the proof
 
@@ -156,7 +156,7 @@ async fn main() {
 async fn shutdown_connection(
     prover_ctrl: ProverControl,
     request_sender: &mut SendRequest<String>,
-    mut recv_private_data: &mut Vec<Vec<u8>>,
+    recv_private_data: &mut Vec<Vec<u8>>,
 ) {
     debug!("Conversation ended, sending final request to Antropic API to shut down the session...");
 
@@ -180,7 +180,7 @@ async fn shutdown_connection(
 
     // Collect the received private data
     extract_private_data(
-        &mut recv_private_data,
+        recv_private_data,
         response.headers(),
         RESPONSE_TOPICS_TO_CENSOR.as_slice(),
     );
@@ -222,17 +222,16 @@ fn build_proof(
 
     let substrings_proof = proof_builder.build().unwrap();
 
-    let proof = TlsProof {
+    TlsProof {
         session: session_proof,
         substrings: substrings_proof,
-    };
-    proof
+    }
 }
 
 async fn notirise_session(
     prover_task: JoinHandle<Result<Prover<Closed>, ProverError>>,
-    recv_private_data: &mut Vec<Vec<u8>>,
-    sent_private_data: &mut Vec<Vec<u8>>,
+    recv_private_data: &[Vec<u8>],
+    sent_private_data: &[Vec<u8>],
 ) -> (Vec<CommitmentId>, Vec<CommitmentId>, NotarizedSession) {
     // The Prover task should be done now, so we can grab it.
     let prover = prover_task.await.unwrap().unwrap();

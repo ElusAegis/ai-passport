@@ -46,6 +46,7 @@ remote = ["tlsn-core", "tlsn-prover", "tlsn-verifier", "notary-client", "dotenv"
 [[bin]]
 name = "passport-for-ai"
 path = "src/bin/passport_for_ai.rs"
+required-features = ["local"]
 
 
 [[bin]]

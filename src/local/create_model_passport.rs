@@ -46,7 +46,7 @@ pub async fn create_model_passport(
                 model_path.display()
             ),
         )
-            .into());
+        .into());
     }
 
     if !is_valid_onnx_path(model_path) {
