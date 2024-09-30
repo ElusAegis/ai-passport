@@ -38,7 +38,7 @@ tracing = { version = "0.1", optional = true }
 tracing-subscriber = { version = "0.3", optional = true }
 
 [features]
-default = ["remote"]
+default = ["remote", "local"]
 local = ["ezkl", "temp-dir", "sha3", "base64"]
 remote = ["tlsn-core", "tlsn-prover", "tlsn-verifier", "notary-client", "dotenv", "hyper", "hyper-util", "http-body-util", "tokio-util", "tracing", "tracing-subscriber", "spansy", "tlsn-formats"]
 
@@ -46,15 +46,6 @@ remote = ["tlsn-core", "tlsn-prover", "tlsn-verifier", "notary-client", "dotenv"
 [[bin]]
 name = "passport-for-ai"
 path = "src/bin/passport_for_ai.rs"
-required-features = ["local"]
-
-
-[[bin]]
-name = "claud-reply"
-path = "src/bin/claud_reply.rs"
-required-features = ["remote"]
-
-
 
 # We need to patch the following two URLs to have a consistent version throughout the project
 [patch.'https://github.com/zkonduit/halo2']
@@ -63,3 +54,6 @@ halo2_proofs = { git = "https://github.com/zkonduit//halo2.git", package = "halo
 # We need to also patch the halo2_proofs with the following URL as it is hardcoded in `ezkl` dependency list
 [patch.'https://github.com/zkonduit/halo2?branch=ac/cache-lookup-commitments#8b13a0d2a7a34d8daab010dadb2c47dfa47d37d0']
 halo2_proofs = { git = "https://github.com/zkonduit//halo2.git", package = "halo2_proofs", branch = "ac/cache-lookup-commitments" }
+
+[patch."https://github.com/tlsnotary/tlsn"]
+notary-client = { git = "https://github.com/ElusAegis/tlsn/", package = "notary-client", branch = "fix/allow-url-path-for-notary" }

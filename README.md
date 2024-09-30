@@ -3,15 +3,16 @@
 ## Introduction
 
 **AI Passport** is a system that generates unique cryptographic passports for machine learning models and verifies that
-outputs are genuinely produced by those models. By leveraging the [EZKL](https://docs.ezkl.xyz/getting_started/)
-library, this system provides a robust framework for tracking and authenticating AI-generated content.
+outputs are genuinely produced by those models. By leveraging cryptographic techniques and
+the [EZKL](https://docs.ezkl.xyz/getting_started/) library, this system provides a robust framework for tracking and
+authenticating AI-generated content.
 
 This project enhances model verification by not only checking the consistency of the model's weights but also ensuring
 the integrity of the verification keys and settings. This guarantees that the same model is being verified in the same
 way, providing an additional layer of security and trust.
 
-> This is an experimental project and should be used with caution. It is not intended for production use without further
-> testing and validation.
+> **Note**: This is an experimental project and should be used with caution. It is not intended for production use
+> without further testing and validation.
 
 ### Key Features
 
@@ -21,6 +22,8 @@ way, providing an additional layer of security and trust.
   data.
 - **Proof Verification**: Verifies the authenticity of the output by checking the proof and ensuring consistency across
   model components.
+- **Remote Operations**: Supports remote interactions with AI services (e.g., Anthropic's API), allowing you to generate
+  and verify proofs of remote AI model executions.
 
 ## Prerequisites
 
@@ -29,8 +32,8 @@ Before running this demo, ensure you have the following installed:
 - **Rust**: Install Rust by following the instructions at [rust-lang.org](https://www.rust-lang.org/tools/install).
 - **ONNX Model**: Have an ONNX model file available (e.g., `network.onnx`).
 - **Input Data**: Prepare input data in JSON format compatible with your model (e.g., `input.json`).
-
-**Note**: Currently, this system supports only local models. Support for remotely hosted models is under development.
+- **API Access**: For remote operations, ensure you have access to the necessary APIs (e.g., Anthropic API) and have
+  your API keys ready.
 
 ## Installation
 
@@ -51,11 +54,21 @@ This command builds the `ai-passport` executable in the `target/release` directo
 
 ## Running the Demo
 
-The demo consists of three main commands:
+The demo consists of several commands divided into local and remote operations:
+
+### Local Operations
 
 1. **create-passport**
 2. **attribute-content**
 3. **verify-attribution**
+
+### Remote Operations
+
+1. **anthropic-conversation**
+
+---
+
+## Local Operations
 
 ### Step 1: Create a Passport for the Model
 
@@ -65,14 +78,13 @@ and including metadata.
 **Command**:
 
 ```bash
-cargo run --release -- create-passport --local model/network.onnx --save-to ./model
+cargo run --release -- local create-passport model/network.onnx --save-to ./model
 ```
 
 **Explanation**:
 
-- `cargo run --release --`: Runs the compiled `ai-passport` binary in release mode.
+- `local`: Specifies that the operation is for a local model.
 - `create-passport`: The command to generate the model's passport.
-- `--local`: Indicates that the model is stored locally.
 - `model/network.onnx`: The path to your ONNX model file.
 - `--save-to ./model`: *(Optional)* Specifies the directory to save the passport. Defaults to the current directory if
   omitted.
@@ -117,13 +129,13 @@ Generate a cryptographic proof that the output is derived from your model given 
 **Command**:
 
 ```bash
-cargo run --release -- attribute-content --local model/network.onnx model/input.json --save-to ./model
+cargo run --release -- local attribute-content model/network.onnx model/input.json --save-to ./model
 ```
 
 **Explanation**:
 
+- `local`: Specifies that the operation is for a local model.
 - `attribute-content`: The command to attribute content to the model.
-- `--local`: Indicates that both the model and content are local files.
 - `model/network.onnx`: The path to your ONNX model file.
 - `model/input.json`: The path to the input data file.
 - `--save-to ./model`: *(Optional)* Specifies the directory to save the output files.
@@ -163,13 +175,13 @@ Verify the cryptographic proof and ensure that the output is genuinely produced 
 **Command**:
 
 ```bash
-cargo run --release -- verify-attribution model/model_network_db9e2eef_passport.json model/model_db9e2eef_attribution_certificate.json
+cargo run --release -- local verify-attribution model/model_network_<model_hash>_passport.json model/model_<model_hash>_attribution_certificate.json
 ```
 
 **Explanation**:
 
+- `local`: Specifies that the operation is for a local model.
 - `verify-attribution`: The command to verify the attribution proof.
-- `model/network.onnx`: The path to your ONNX model file.
 - `model/model_network_<model_hash>_passport.json`: The path to the model's passport generated in Step 1.
 - `model/model_<model_hash>_attribution_certificate.json`: The path to the attribution certificate generated in Step 2.
 
@@ -190,10 +202,78 @@ cargo run --release -- verify-attribution model/model_network_db9e2eef_passport.
 Replace `<model_hash>` with the first 10 characters of your model's identity hash, which is part of the filename of the
 generated files.
 
+---
+
+## Remote Operations
+
+With the addition of remote operations, you can now interact with AI models hosted remotely (e.g., via APIs) and
+generate proofs of these interactions. The identity of the model is included in the proof, ensuring that the output is
+genuinely produced by the specified model.
+
+### Step 1: Interact with Anthropic's API and Generate a Proof
+
+Engage in a conversation with an AI assistant (e.g., Anthropic's Claude) and generate a cryptographic proof of the
+conversation.
+
+**Command**:
+
+```bash
+cargo run --release -- remote anthropic-conversation
+```
+
+**Explanation**:
+
+- `remote`: Specifies that the operation is for a remote model or service.
+- `anthropic-conversation`: Initiates a conversation with Anthropic's AI assistant and generates a proof of the
+  interaction.
+
+**What It Does**:
+
+- **Initiates a Conversation**: Starts an interactive session where you can send messages to the AI assistant and
+  receive responses.
+- **Generates a Cryptographic Proof**: After the conversation, the application generates a proof that the conversation
+  occurred as recorded.
+- **Saves the Proof**: The proof is saved to a file named `claude_conversation_proof.json`.
+
+**Sample Output**:
+
+```
+🌟 Welcome to the Anthropic Prover CLI! 🌟
+This application will interact with the Anthropic API to generate a cryptographic proof of your conversation.
+💬 First, you will engage in a conversation with the assistant.
+The assistant will respond to your messages in real time.
+📝 When you're done, simply type 'exit' or press Enter without typing a message to end the conversation.
+🔒 Once finished, a proof of the conversation will be generated.
+💾 The proof will be saved as 'claude_conversation_proof.json' for your records.
+✨ Let's get started! Begin by sending your first message.
+
+💬 Your message:
+> Hello, assistant!
+```
+
+After the conversation:
+
+```
+🔒 Generating a cryptographic proof of the conversation. Please wait...
+✅ Proof successfully saved to `claude_conversation_proof.json`.
+🔍 You can share this proof or inspect it at: https://explorer.tlsnotary.org/.
+📂 Simply upload the proof, and anyone can verify its authenticity and inspect the details.
+```
+
+### Verifying the Proof
+
+You can verify the execution of the model and inspect the conversation by uploading the proof file to
+the [TLSNotary Explorer](https://explorer.tlsnotary.org/). This allows you and others to:
+
+- **Verify Authenticity**: Confirm that the conversation took place exactly as recorded.
+- **Inspect Details**: View the messages exchanged during the conversation.
+
+---
+
 ## Future Work
 
-- **Support for Remote Models**: Future updates will include the ability to handle models hosted remotely.
-- **Enhanced Metadata Input**: Plans to allow users to input model metadata through CLI options or interactive prompts.
+- **Support for Additional Remote Models**: Plans to integrate support for other AI services and APIs.
+- **Enhanced Metadata Input**: Allow users to input model metadata through CLI options or interactive prompts.
 - **Additional Features**:
     - Support for different proof systems.
     - Integration with model repositories for automatic passport generation.

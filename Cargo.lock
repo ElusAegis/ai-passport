@@ -4284,7 +4284,7 @@ dependencies = [
 [[package]]
 name = "notary-client"
 version = "0.1.0-alpha.6"
-source = "git+https://github.com/tlsnotary/tlsn?tag=v0.1.0-alpha.6#3554db83e17b2e5fc98293b397a2907b7f023496"
+source = "git+https://github.com/ElusAegis/tlsn/?branch=fix/allow-url-path-for-notary#e8c45c33e8b694b9254c383bed7429a4a3b4d4e0"
 dependencies = [
  "derive_builder 0.12.0",
  "futures",
@@ -4294,7 +4294,7 @@ dependencies = [
  "notary-server",
  "serde_json",
  "thiserror",
- "tlsn-common",
+ "tlsn-common 0.1.0-alpha.6 (git+https://github.com/ElusAegis/tlsn/?branch=fix/allow-url-path-for-notary)",
  "tokio",
  "tokio-rustls 0.24.1",
  "tracing",
@@ -4304,7 +4304,7 @@ dependencies = [
 [[package]]
 name = "notary-server"
 version = "0.1.0-alpha.6"
-source = "git+https://github.com/tlsnotary/tlsn?tag=v0.1.0-alpha.6#3554db83e17b2e5fc98293b397a2907b7f023496"
+source = "git+https://github.com/ElusAegis/tlsn/?branch=fix/allow-url-path-for-notary#e8c45c33e8b694b9254c383bed7429a4a3b4d4e0"
 dependencies = [
  "async-trait",
  "async-tungstenite 0.25.1",
@@ -4331,7 +4331,7 @@ dependencies = [
  "sha1",
  "structopt",
  "thiserror",
- "tlsn-verifier",
+ "tlsn-verifier 0.1.0-alpha.6 (git+https://github.com/ElusAegis/tlsn/?branch=fix/allow-url-path-for-notary)",
  "tokio",
  "tokio-rustls 0.24.1",
  "tokio-util",
@@ -4664,10 +4664,10 @@ dependencies = [
  "sha3 0.10.8",
  "spansy",
  "temp-dir",
- "tlsn-core",
+ "tlsn-core 0.1.0-alpha.6 (git+https://github.com/tlsnotary/tlsn?tag=v0.1.0-alpha.6)",
  "tlsn-formats",
  "tlsn-prover",
- "tlsn-verifier",
+ "tlsn-verifier 0.1.0-alpha.6 (git+https://github.com/tlsnotary/tlsn?tag=v0.1.0-alpha.6)",
  "tokio",
  "tokio-util",
  "tracing",
@@ -6594,9 +6594,30 @@ dependencies = [
  "serde",
  "serio",
  "thiserror",
- "tlsn-block-cipher",
- "tlsn-stream-cipher",
- "tlsn-universal-hash",
+ "tlsn-block-cipher 0.1.0-alpha.6 (git+https://github.com/tlsnotary/tlsn?tag=v0.1.0-alpha.6)",
+ "tlsn-stream-cipher 0.1.0-alpha.6 (git+https://github.com/tlsnotary/tlsn?tag=v0.1.0-alpha.6)",
+ "tlsn-universal-hash 0.1.0-alpha.6 (git+https://github.com/tlsnotary/tlsn?tag=v0.1.0-alpha.6)",
+ "tracing",
+]
+
+[[package]]
+name = "tlsn-aead"
+version = "0.1.0-alpha.6"
+source = "git+https://github.com/ElusAegis/tlsn/?branch=fix/allow-url-path-for-notary#e8c45c33e8b694b9254c383bed7429a4a3b4d4e0"
+dependencies = [
+ "async-trait",
+ "derive_builder 0.12.0",
+ "futures",
+ "mpz-common",
+ "mpz-core",
+ "mpz-garble",
+ "mpz-ot",
+ "serde",
+ "serio",
+ "thiserror",
+ "tlsn-block-cipher 0.1.0-alpha.6 (git+https://github.com/ElusAegis/tlsn/?branch=fix/allow-url-path-for-notary)",
+ "tlsn-stream-cipher 0.1.0-alpha.6 (git+https://github.com/ElusAegis/tlsn/?branch=fix/allow-url-path-for-notary)",
+ "tlsn-universal-hash 0.1.0-alpha.6 (git+https://github.com/ElusAegis/tlsn/?branch=fix/allow-url-path-for-notary)",
  "tracing",
 ]
 
@@ -6615,9 +6636,37 @@ dependencies = [
 ]
 
 [[package]]
+name = "tlsn-block-cipher"
+version = "0.1.0-alpha.6"
+source = "git+https://github.com/ElusAegis/tlsn/?branch=fix/allow-url-path-for-notary#e8c45c33e8b694b9254c383bed7429a4a3b4d4e0"
+dependencies = [
+ "async-trait",
+ "derive_builder 0.12.0",
+ "mpz-circuits",
+ "mpz-garble",
+ "thiserror",
+ "tlsn-utils 0.1.0 (git+https://github.com/tlsnotary/tlsn-utils?rev=45370cc)",
+ "tracing",
+]
+
+[[package]]
 name = "tlsn-common"
 version = "0.1.0-alpha.6"
 source = "git+https://github.com/tlsnotary/tlsn?tag=v0.1.0-alpha.6#3554db83e17b2e5fc98293b397a2907b7f023496"
+dependencies = [
+ "futures",
+ "mpz-common",
+ "mpz-garble",
+ "mpz-ot",
+ "serio",
+ "tracing",
+ "uid-mux",
+]
+
+[[package]]
+name = "tlsn-common"
+version = "0.1.0-alpha.6"
+source = "git+https://github.com/ElusAegis/tlsn/?branch=fix/allow-url-path-for-notary#e8c45c33e8b694b9254c383bed7429a4a3b4d4e0"
 dependencies = [
  "futures",
  "mpz-common",
@@ -6645,7 +6694,30 @@ dependencies = [
  "rs_merkle",
  "serde",
  "thiserror",
- "tlsn-tls-core",
+ "tlsn-tls-core 0.1.0-alpha.6 (git+https://github.com/tlsnotary/tlsn?tag=v0.1.0-alpha.6)",
+ "tlsn-utils 0.1.0 (git+https://github.com/tlsnotary/tlsn-utils?rev=45370cc)",
+ "web-time 0.2.4",
+ "webpki-roots",
+]
+
+[[package]]
+name = "tlsn-core"
+version = "0.1.0-alpha.6"
+source = "git+https://github.com/ElusAegis/tlsn/?branch=fix/allow-url-path-for-notary#e8c45c33e8b694b9254c383bed7429a4a3b4d4e0"
+dependencies = [
+ "bimap",
+ "bytes",
+ "getrandom",
+ "mpz-circuits",
+ "mpz-core",
+ "mpz-garble-core",
+ "opaque-debug",
+ "p256",
+ "ring",
+ "rs_merkle",
+ "serde",
+ "thiserror",
+ "tlsn-tls-core 0.1.0-alpha.6 (git+https://github.com/ElusAegis/tlsn/?branch=fix/allow-url-path-for-notary)",
  "tlsn-utils 0.1.0 (git+https://github.com/tlsnotary/tlsn-utils?rev=45370cc)",
  "web-time 0.2.4",
  "webpki-roots",
@@ -6660,7 +6732,7 @@ dependencies = [
  "serde",
  "spansy",
  "thiserror",
- "tlsn-core",
+ "tlsn-core 0.1.0-alpha.6 (git+https://github.com/tlsnotary/tlsn?tag=v0.1.0-alpha.6)",
  "tlsn-utils 0.1.0 (git+https://github.com/tlsnotary/tlsn-utils?rev=45370cc)",
 ]
 
@@ -6676,7 +6748,23 @@ dependencies = [
  "mpz-common",
  "mpz-garble",
  "thiserror",
- "tlsn-hmac-sha256-circuits",
+ "tlsn-hmac-sha256-circuits 0.1.0-alpha.6 (git+https://github.com/tlsnotary/tlsn?tag=v0.1.0-alpha.6)",
+ "tracing",
+]
+
+[[package]]
+name = "tlsn-hmac-sha256"
+version = "0.1.0-alpha.6"
+source = "git+https://github.com/ElusAegis/tlsn/?branch=fix/allow-url-path-for-notary#e8c45c33e8b694b9254c383bed7429a4a3b4d4e0"
+dependencies = [
+ "async-trait",
+ "derive_builder 0.12.0",
+ "futures",
+ "mpz-circuits",
+ "mpz-common",
+ "mpz-garble",
+ "thiserror",
+ "tlsn-hmac-sha256-circuits 0.1.0-alpha.6 (git+https://github.com/ElusAegis/tlsn/?branch=fix/allow-url-path-for-notary)",
  "tracing",
 ]
 
@@ -6690,9 +6778,40 @@ dependencies = [
 ]
 
 [[package]]
+name = "tlsn-hmac-sha256-circuits"
+version = "0.1.0-alpha.6"
+source = "git+https://github.com/ElusAegis/tlsn/?branch=fix/allow-url-path-for-notary#e8c45c33e8b694b9254c383bed7429a4a3b4d4e0"
+dependencies = [
+ "mpz-circuits",
+ "tracing",
+]
+
+[[package]]
 name = "tlsn-key-exchange"
 version = "0.1.0-alpha.6"
 source = "git+https://github.com/tlsnotary/tlsn?tag=v0.1.0-alpha.6#3554db83e17b2e5fc98293b397a2907b7f023496"
+dependencies = [
+ "async-trait",
+ "derive_builder 0.12.0",
+ "futures",
+ "mpz-circuits",
+ "mpz-common",
+ "mpz-fields",
+ "mpz-garble",
+ "mpz-ot",
+ "mpz-share-conversion",
+ "p256",
+ "rand",
+ "serde",
+ "serio",
+ "thiserror",
+ "tracing",
+]
+
+[[package]]
+name = "tlsn-key-exchange"
+version = "0.1.0-alpha.6"
+source = "git+https://github.com/ElusAegis/tlsn/?branch=fix/allow-url-path-for-notary#e8c45c33e8b694b9254c383bed7429a4a3b4d4e0"
 dependencies = [
  "async-trait",
  "derive_builder 0.12.0",
@@ -6732,13 +6851,13 @@ dependencies = [
  "ring",
  "serio",
  "thiserror",
- "tlsn-common",
- "tlsn-core",
+ "tlsn-common 0.1.0-alpha.6 (git+https://github.com/tlsnotary/tlsn?tag=v0.1.0-alpha.6)",
+ "tlsn-core 0.1.0-alpha.6 (git+https://github.com/tlsnotary/tlsn?tag=v0.1.0-alpha.6)",
  "tlsn-formats",
  "tlsn-tls-client",
  "tlsn-tls-client-async",
- "tlsn-tls-core",
- "tlsn-tls-mpc",
+ "tlsn-tls-core 0.1.0-alpha.6 (git+https://github.com/tlsnotary/tlsn?tag=v0.1.0-alpha.6)",
+ "tlsn-tls-mpc 0.1.0-alpha.6 (git+https://github.com/tlsnotary/tlsn?tag=v0.1.0-alpha.6)",
  "tlsn-utils 0.1.0 (git+https://github.com/tlsnotary/tlsn-utils?rev=45370cc)",
  "tlsn-utils-aio 0.1.0 (git+https://github.com/tlsnotary/tlsn-utils?rev=45370cc)",
  "tracing",
@@ -6766,6 +6885,24 @@ dependencies = [
 ]
 
 [[package]]
+name = "tlsn-stream-cipher"
+version = "0.1.0-alpha.6"
+source = "git+https://github.com/ElusAegis/tlsn/?branch=fix/allow-url-path-for-notary#e8c45c33e8b694b9254c383bed7429a4a3b4d4e0"
+dependencies = [
+ "aes 0.8.4",
+ "async-trait",
+ "cipher 0.4.4",
+ "ctr 0.9.2",
+ "derive_builder 0.12.0",
+ "mpz-circuits",
+ "mpz-garble",
+ "opaque-debug",
+ "thiserror",
+ "tlsn-utils 0.1.0 (git+https://github.com/tlsnotary/tlsn-utils?rev=45370cc)",
+ "tracing",
+]
+
+[[package]]
 name = "tlsn-tls-backend"
 version = "0.1.0-alpha.6"
 source = "git+https://github.com/tlsnotary/tlsn?tag=v0.1.0-alpha.6#3554db83e17b2e5fc98293b397a2907b7f023496"
@@ -6773,7 +6910,18 @@ dependencies = [
  "async-trait",
  "futures",
  "thiserror",
- "tlsn-tls-core",
+ "tlsn-tls-core 0.1.0-alpha.6 (git+https://github.com/tlsnotary/tlsn?tag=v0.1.0-alpha.6)",
+]
+
+[[package]]
+name = "tlsn-tls-backend"
+version = "0.1.0-alpha.6"
+source = "git+https://github.com/ElusAegis/tlsn/?branch=fix/allow-url-path-for-notary#e8c45c33e8b694b9254c383bed7429a4a3b4d4e0"
+dependencies = [
+ "async-trait",
+ "futures",
+ "thiserror",
+ "tlsn-tls-core 0.1.0-alpha.6 (git+https://github.com/ElusAegis/tlsn/?branch=fix/allow-url-path-for-notary)",
 ]
 
 [[package]]
@@ -6793,8 +6941,8 @@ dependencies = [
  "ring",
  "sct",
  "sha2",
- "tlsn-tls-backend",
- "tlsn-tls-core",
+ "tlsn-tls-backend 0.1.0-alpha.6 (git+https://github.com/tlsnotary/tlsn?tag=v0.1.0-alpha.6)",
+ "tlsn-tls-core 0.1.0-alpha.6 (git+https://github.com/tlsnotary/tlsn?tag=v0.1.0-alpha.6)",
  "web-time 0.2.4",
  "webpki",
 ]
@@ -6832,6 +6980,25 @@ dependencies = [
 ]
 
 [[package]]
+name = "tlsn-tls-core"
+version = "0.1.0-alpha.6"
+source = "git+https://github.com/ElusAegis/tlsn/?branch=fix/allow-url-path-for-notary#e8c45c33e8b694b9254c383bed7429a4a3b4d4e0"
+dependencies = [
+ "futures",
+ "hmac",
+ "rand",
+ "ring",
+ "rustls-pemfile 1.0.4",
+ "sct",
+ "serde",
+ "sha2",
+ "thiserror",
+ "tracing",
+ "web-time 0.2.4",
+ "webpki",
+]
+
+[[package]]
 name = "tlsn-tls-mpc"
 version = "0.1.0-alpha.6"
 source = "git+https://github.com/tlsnotary/tlsn?tag=v0.1.0-alpha.6#3554db83e17b2e5fc98293b397a2907b7f023496"
@@ -6852,14 +7019,48 @@ dependencies = [
  "rand",
  "serde",
  "thiserror",
- "tlsn-aead",
- "tlsn-block-cipher",
- "tlsn-hmac-sha256",
- "tlsn-key-exchange",
- "tlsn-stream-cipher",
- "tlsn-tls-backend",
- "tlsn-tls-core",
- "tlsn-universal-hash",
+ "tlsn-aead 0.1.0-alpha.6 (git+https://github.com/tlsnotary/tlsn?tag=v0.1.0-alpha.6)",
+ "tlsn-block-cipher 0.1.0-alpha.6 (git+https://github.com/tlsnotary/tlsn?tag=v0.1.0-alpha.6)",
+ "tlsn-hmac-sha256 0.1.0-alpha.6 (git+https://github.com/tlsnotary/tlsn?tag=v0.1.0-alpha.6)",
+ "tlsn-key-exchange 0.1.0-alpha.6 (git+https://github.com/tlsnotary/tlsn?tag=v0.1.0-alpha.6)",
+ "tlsn-stream-cipher 0.1.0-alpha.6 (git+https://github.com/tlsnotary/tlsn?tag=v0.1.0-alpha.6)",
+ "tlsn-tls-backend 0.1.0-alpha.6 (git+https://github.com/tlsnotary/tlsn?tag=v0.1.0-alpha.6)",
+ "tlsn-tls-core 0.1.0-alpha.6 (git+https://github.com/tlsnotary/tlsn?tag=v0.1.0-alpha.6)",
+ "tlsn-universal-hash 0.1.0-alpha.6 (git+https://github.com/tlsnotary/tlsn?tag=v0.1.0-alpha.6)",
+ "tlsn-utils-aio 0.1.0 (git+https://github.com/tlsnotary/tlsn-utils?rev=45370cc)",
+ "tracing",
+ "uid-mux",
+]
+
+[[package]]
+name = "tlsn-tls-mpc"
+version = "0.1.0-alpha.6"
+source = "git+https://github.com/ElusAegis/tlsn/?branch=fix/allow-url-path-for-notary#e8c45c33e8b694b9254c383bed7429a4a3b4d4e0"
+dependencies = [
+ "async-trait",
+ "derive_builder 0.12.0",
+ "enum-try-as-inner",
+ "futures",
+ "ludi",
+ "mpz-common",
+ "mpz-core",
+ "mpz-fields",
+ "mpz-garble",
+ "mpz-ole",
+ "mpz-ot",
+ "mpz-share-conversion",
+ "p256",
+ "rand",
+ "serde",
+ "thiserror",
+ "tlsn-aead 0.1.0-alpha.6 (git+https://github.com/ElusAegis/tlsn/?branch=fix/allow-url-path-for-notary)",
+ "tlsn-block-cipher 0.1.0-alpha.6 (git+https://github.com/ElusAegis/tlsn/?branch=fix/allow-url-path-for-notary)",
+ "tlsn-hmac-sha256 0.1.0-alpha.6 (git+https://github.com/ElusAegis/tlsn/?branch=fix/allow-url-path-for-notary)",
+ "tlsn-key-exchange 0.1.0-alpha.6 (git+https://github.com/ElusAegis/tlsn/?branch=fix/allow-url-path-for-notary)",
+ "tlsn-stream-cipher 0.1.0-alpha.6 (git+https://github.com/ElusAegis/tlsn/?branch=fix/allow-url-path-for-notary)",
+ "tlsn-tls-backend 0.1.0-alpha.6 (git+https://github.com/ElusAegis/tlsn/?branch=fix/allow-url-path-for-notary)",
+ "tlsn-tls-core 0.1.0-alpha.6 (git+https://github.com/ElusAegis/tlsn/?branch=fix/allow-url-path-for-notary)",
+ "tlsn-universal-hash 0.1.0-alpha.6 (git+https://github.com/ElusAegis/tlsn/?branch=fix/allow-url-path-for-notary)",
  "tlsn-utils-aio 0.1.0 (git+https://github.com/tlsnotary/tlsn-utils?rev=45370cc)",
  "tracing",
  "uid-mux",
@@ -6869,6 +7070,26 @@ dependencies = [
 name = "tlsn-universal-hash"
 version = "0.1.0-alpha.6"
 source = "git+https://github.com/tlsnotary/tlsn?tag=v0.1.0-alpha.6#3554db83e17b2e5fc98293b397a2907b7f023496"
+dependencies = [
+ "async-trait",
+ "derive_builder 0.12.0",
+ "futures",
+ "futures-util",
+ "ghash 0.5.1",
+ "mpz-common",
+ "mpz-core",
+ "mpz-fields",
+ "mpz-share-conversion",
+ "mpz-share-conversion-core",
+ "opaque-debug",
+ "thiserror",
+ "tracing",
+]
+
+[[package]]
+name = "tlsn-universal-hash"
+version = "0.1.0-alpha.6"
+source = "git+https://github.com/ElusAegis/tlsn/?branch=fix/allow-url-path-for-notary#e8c45c33e8b694b9254c383bed7429a4a3b4d4e0"
 dependencies = [
  "async-trait",
  "derive_builder 0.12.0",
@@ -6960,10 +7181,38 @@ dependencies = [
  "serio",
  "signature",
  "thiserror",
- "tlsn-common",
- "tlsn-core",
- "tlsn-tls-core",
- "tlsn-tls-mpc",
+ "tlsn-common 0.1.0-alpha.6 (git+https://github.com/tlsnotary/tlsn?tag=v0.1.0-alpha.6)",
+ "tlsn-core 0.1.0-alpha.6 (git+https://github.com/tlsnotary/tlsn?tag=v0.1.0-alpha.6)",
+ "tlsn-tls-core 0.1.0-alpha.6 (git+https://github.com/tlsnotary/tlsn?tag=v0.1.0-alpha.6)",
+ "tlsn-tls-mpc 0.1.0-alpha.6 (git+https://github.com/tlsnotary/tlsn?tag=v0.1.0-alpha.6)",
+ "tlsn-utils-aio 0.1.0 (git+https://github.com/tlsnotary/tlsn-utils?rev=45370cc)",
+ "tracing",
+ "uid-mux",
+]
+
+[[package]]
+name = "tlsn-verifier"
+version = "0.1.0-alpha.6"
+source = "git+https://github.com/ElusAegis/tlsn/?branch=fix/allow-url-path-for-notary#e8c45c33e8b694b9254c383bed7429a4a3b4d4e0"
+dependencies = [
+ "derive_builder 0.12.0",
+ "futures",
+ "mpz-circuits",
+ "mpz-common",
+ "mpz-core",
+ "mpz-garble",
+ "mpz-ole",
+ "mpz-ot",
+ "mpz-share-conversion",
+ "opaque-debug",
+ "rand",
+ "serio",
+ "signature",
+ "thiserror",
+ "tlsn-common 0.1.0-alpha.6 (git+https://github.com/ElusAegis/tlsn/?branch=fix/allow-url-path-for-notary)",
+ "tlsn-core 0.1.0-alpha.6 (git+https://github.com/ElusAegis/tlsn/?branch=fix/allow-url-path-for-notary)",
+ "tlsn-tls-core 0.1.0-alpha.6 (git+https://github.com/ElusAegis/tlsn/?branch=fix/allow-url-path-for-notary)",
+ "tlsn-tls-mpc 0.1.0-alpha.6 (git+https://github.com/ElusAegis/tlsn/?branch=fix/allow-url-path-for-notary)",
  "tlsn-utils-aio 0.1.0 (git+https://github.com/tlsnotary/tlsn-utils?rev=45370cc)",
  "tracing",
  "uid-mux",
@@ -7955,7 +8204,7 @@ version = "0.1.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "cf221c93e13a30d793f7645a0e7762c55d169dbb0a49671918a2319d289b10bb"
 dependencies = [
- "windows-sys 0.59.0",
+ "windows-sys 0.48.0",
 ]
 
 [[package]]
