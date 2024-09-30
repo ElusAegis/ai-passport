@@ -100,12 +100,8 @@ pub async fn generate_proof_of_conversation() -> Result<(), Box<dyn std::error::
         messages.push(user_message);
 
         // Prepare the Request to send to the Anthropic API
-        let request = generate_request(&mut messages, &api_key).map_err(|e| {
-            format!(
-                "Request {request_index} failed with error: {}",
-                e.to_string()
-            )
-        })?;
+        let request = generate_request(&mut messages, &api_key)
+            .map_err(|e| format!("Request {request_index} failed with error: {}", e))?;
 
         // Collect the sent private data
         extract_private_data(
@@ -118,12 +114,10 @@ pub async fn generate_proof_of_conversation() -> Result<(), Box<dyn std::error::
 
         debug!("Sending request {request_index} to Anthropic API...");
 
-        let response = request_sender.send_request(request).await.map_err(|e| {
-            format!(
-                "Request {request_index} failed with error: {}",
-                e.to_string()
-            )
-        })?;
+        let response = request_sender
+            .send_request(request)
+            .await
+            .map_err(|e| format!("Request {request_index} failed with error: {}", e))?;
 
         debug!("Received response {request_index} from Anthropic");
 
@@ -434,7 +428,7 @@ async fn setup_connections() -> Result<
         // Send requests for configuration and notarization to the notary server.
         let notarization_request = NotarizationRequest::builder()
             .build()
-            .map_err(|e| format!("Error creating notarization request: {}", e.to_string()))?;
+            .map_err(|e| format!("Error creating notarization request: {}", e))?;
 
         let Accepted {
             io: notary_connection,

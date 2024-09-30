@@ -128,7 +128,10 @@ async fn main() -> Result<(), Box<dyn Error>> {
     else if let Some(remote_matches) = matches.subcommand_matches("remote") {
         #[cfg(feature = "remote")]
         {
-            if let Some(_) = remote_matches.subcommand_matches("anthropic-conversation") {
+            if remote_matches
+                .subcommand_matches("anthropic-conversation")
+                .is_some()
+            {
                 remote::generate_proof_of_conversation()
                     .await
                     .map_err(|err| format!("Error during conversation: {}", err))?;
