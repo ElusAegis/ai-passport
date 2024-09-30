@@ -3,4 +3,4 @@
 /model/*.json
 !/model/input.json
 /.env
-/claud_response_proof.json
+/claud_conversation_proof.json

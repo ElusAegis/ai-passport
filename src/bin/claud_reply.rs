@@ -46,20 +46,34 @@ async fn main() {
     let mut recv_private_data = vec![];
     let mut sent_private_data = vec![];
 
+    // Print the rules on how to use the application
+    info!("🌟 Welcome to the Anthropic Prover CLI! 🌟");
+    info!(
+        "This application will interact with the Anthropic API to generate a cryptographic proof of your conversation."
+    );
+    info!("💬 First, you will engage in a conversation with the assistant.");
+    info!("The assistant will respond to your messages in real time.");
+    info!("📝 When you're done, simply type 'exit' or press Enter without typing a message to end the conversation.");
+    info!("🔒 Once finished, a proof of the conversation will be generated.");
+    info!("💾 The proof will be saved as 'claude_conversation_proof.json' for your records.");
+    info!("✨ Let's get started! Begin by sending your first message.");
+
     loop {
         let mut user_message = String::new();
         if request_index == 1 {
             user_message = SETUP_PROMPT.to_string();
-            debug!("Sending setup prompt to Antropic API: {}", user_message);
+            debug!("Sending setup prompt to Anthropic API: {}", user_message);
             // TODO - consider how to make it optional and not get a timeout error
         } else {
-            // Prompt the user to provide a message to send to the assistant
-            info!("Please provide a message to send to the assistant:");
-            info!("(Type 'exit' or press Enter to exit the conversation)");
+            info!("💬 Your message\n(type 'exit' to end): ");
+
+            print!("> "); // Simple user prompt indicator like a terminal prompt.
             std::io::stdin().read_line(&mut user_message).unwrap();
+            print!("");
         }
 
         if user_message.trim().is_empty() || user_message.trim() == "exit" {
+            info!("🔒 Generating a cryptographic proof of the conversation. Please wait...");
             break;
         }
 
@@ -73,7 +87,7 @@ async fn main() {
 
         messages.push(user_message);
 
-        // Prepare the Request to send to the Antropic API
+        // Prepare the Request to send to the Anthropic API
         let request = generate_request(&mut messages, &api_key);
 
         // Collect the sent private data
@@ -85,11 +99,11 @@ async fn main() {
 
         debug!("Request {request_index}: {:?}", request);
 
-        debug!("Sending request {request_index} to Antropic API...");
+        debug!("Sending request {request_index} to Anthropic API...");
 
         let response = request_sender.send_request(request).await.unwrap();
 
-        debug!("Received response {request_index} from Antropic");
+        debug!("Received response {request_index} from Anthropic");
 
         debug!("Raw response {request_index}: {:?}", response);
 
@@ -120,11 +134,16 @@ async fn main() {
             serde_json::to_string_pretty(&parsed).unwrap()
         );
 
-        debug!("Request {request_index} to Antropic succeeded");
+        debug!("Request {request_index} to Anthropic succeeded");
 
         let received_assistant_message =
             json!({"role": "assistant", "content": parsed["content"][0]["text"]});
         messages.push(received_assistant_message);
+
+        info!(
+            "🤖 Assistant's response:\n\n{}",
+            parsed["content"][0]["text"]
+        );
 
         request_index += 1;
     }
@@ -145,12 +164,18 @@ async fn main() {
     );
 
     // Dump the proof to a file.
-    let mut file = tokio::fs::File::create("claud_response_proof.json")
+    let mut file = tokio::fs::File::create("claud_conversation_proof.json")
         .await
         .unwrap();
     file.write_all(serde_json::to_string_pretty(&proof).unwrap().as_bytes())
         .await
         .unwrap();
+
+    info!("✅ Proof successfully saved to `claude_conversation_proof.json`.");
+    info!(
+        "\n🔍 You can share this proof or inspect it at: https://explorer.tlsnotary.org/.\n\
+        📂 Simply upload the proof, and anyone can verify its authenticity and inspect the details."
+    );
 }
 
 async fn shutdown_connection(
@@ -158,7 +183,9 @@ async fn shutdown_connection(
     request_sender: &mut SendRequest<String>,
     recv_private_data: &mut Vec<Vec<u8>>,
 ) {
-    debug!("Conversation ended, sending final request to Antropic API to shut down the session...");
+    debug!(
+        "Conversation ended, sending final request to Anthropic API to shut down the session..."
+    );
 
     // Prepare final request to close the session
     let close_connection_request = hyper::Request::builder()
@@ -168,7 +195,7 @@ async fn shutdown_connection(
         .body(String::new())
         .unwrap();
 
-    debug!("Sending final request to Antropic API...");
+    debug!("Sending final request to Anthropic API...");
 
     // As this is the last request, we can defer decryption until the end.
     prover_ctrl.defer_decryption().await.unwrap();
@@ -332,7 +359,7 @@ async fn setup_connections() -> (
 ) {
     tracing_subscriber::fmt::init();
 
-    // Load secret variables from environment for Antropic API connection
+    // Load secret variables from environment for Anthropic API connection
     dotenv::dotenv().ok();
     let api_key = env::var("ANTHROPIC_API_KEY").expect("ANTHROPIC_API_KEY must be set");
 
@@ -369,7 +396,7 @@ async fn setup_connections() -> (
         .await
         .unwrap();
 
-    println!("Prover setup complete!");
+    debug!("Prover setup complete!");
     // Open a new socket to the application server.
     let client_socket = tokio::net::TcpStream::connect((SERVER_DOMAIN, 443))
         .await
@@ -406,7 +433,7 @@ fn generate_request(
     json_body.insert("messages".to_string(), messages);
     let json_body = serde_json::Value::Object(json_body);
 
-    // Build the HTTP request to send the prompt to Antropic API
+    // Build the HTTP request to send the prompt to Anthropic API
     hyper::Request::builder()
         .method(Method::POST)
         .uri(ROUTE)
