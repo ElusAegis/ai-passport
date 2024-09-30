@@ -2,3 +2,5 @@
 
 /model/*.json
 !/model/input.json
+/.env
+/claud_conversation_proof.json
