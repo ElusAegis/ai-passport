@@ -33,15 +33,16 @@ hyper = { version = "1.1", features = ["client", "http1"], optional = true }
 hyper-util = { version = "0.1", features = ["full"], optional = true }
 http-body-util = { version = "0.1.2", optional = true }
 tokio-util = { version = "0.7", optional = true }
-
+p256 = { version = "0.13", features = ["ecdsa"], optional = true }
+futures = { version = "0.3", optional = true }
 tracing = { version = "0.1", optional = true }
 tracing-subscriber = { version = "0.3", optional = true }
 
 [features]
 default = ["remote", "local"]
 local = ["ezkl", "temp-dir", "sha3", "base64"]
-remote = ["tlsn-core", "tlsn-prover", "tlsn-verifier", "notary-client", "dotenv", "hyper", "hyper-util", "http-body-util", "tokio-util", "tracing", "tracing-subscriber", "spansy", "tlsn-formats"]
-
+remote = ["tlsn-core", "tlsn-prover", "tlsn-verifier", "notary-client", "dotenv", "hyper", "hyper-util", "http-body-util", "tokio-util", "tracing", "tracing-subscriber", "spansy", "tlsn-formats", "p256", "futures"]
+dummy-notary = ["remote"]
 
 [[bin]]
 name = "passport-for-ai"

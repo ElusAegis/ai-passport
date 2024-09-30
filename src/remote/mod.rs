@@ -1,9 +1,11 @@
+use futures::{AsyncRead, AsyncWrite};
 use http_body_util::BodyExt;
 use hyper::client::conn::http1::SendRequest;
 use hyper::header::{CONNECTION, CONTENT_TYPE, HOST};
 use hyper::{HeaderMap, Method, StatusCode};
 use hyper_util::rt::TokioIo;
 use notary_client::{Accepted, NotarizationRequest, NotaryClient};
+use p256::pkcs8::DecodePrivateKey;
 use serde_json::json;
 use std::ops::Range;
 use std::{env, str};
@@ -11,6 +13,7 @@ use tlsn_core::commitment::CommitmentId;
 use tlsn_core::{proof::TlsProof, NotarizedSession};
 use tlsn_prover::tls::state::Closed;
 use tlsn_prover::tls::{Prover, ProverConfig, ProverControl, ProverError};
+use tlsn_verifier::tls::{Verifier, VerifierConfig};
 use tokio::io::AsyncWriteExt as _;
 use tokio::task::JoinHandle;
 use tokio_util::compat::{FuturesAsyncReadCompatExt, TokioAsyncReadCompatExt};
@@ -30,7 +33,6 @@ const RESPONSE_TOPICS_TO_CENSOR: [&str; 6] = [
     "date",
 ];
 
-// Setting of the notary server — make sure these are the same with the config in ../../../notary/server
 const NOTARY_HOST: &str = "notary.pse.dev";
 const NOTARY_PORT: u16 = 443;
 const NOTARY_PATH: &str = "v0.1.0-alpha.6";
@@ -198,6 +200,16 @@ pub async fn generate_proof_of_conversation() -> Result<(), Box<dyn std::error::
         "\n🔍 You can share this proof or inspect it at: https://explorer.tlsnotary.org/.\n\
         📂 Simply upload the proof, and anyone can verify its authenticity and inspect the details."
     );
+
+    #[cfg(feature = "dummy-notary")]
+    {
+        let public_key = include_str!("../../tlsn/notary.pub");
+
+        // Dummy notary is used for testing purposes only
+        // It is not secure and should not be used in production
+        info!("🚨 PUBLIC KEY: \n{}", public_key);
+        info!("🚨 WARNING: Dummy notary is used for testing purposes only. It is not secure and should not be used in production.");
+    }
 
     Ok(())
 }
@@ -389,41 +401,63 @@ async fn setup_connections() -> Result<
     ),
     String,
 > {
-    // Build a client to connect to the notary server.
-    let notary_client = NotaryClient::builder()
-        .host(NOTARY_HOST)
-        .port(NOTARY_PORT)
-        .path(NOTARY_PATH)
-        .enable_tls(true)
-        .build()
-        .unwrap();
+    let prover = if cfg!(feature = "dummy-notary") {
+        info!("🚨 WARNING: Dummy notary is used for testing purposes only. It is not secure and should not be used in production.");
+        let (prover_socket, notary_socket) = tokio::io::duplex(1 << 16);
 
-    // Send requests for configuration and notarization to the notary server.
-    let notarization_request = NotarizationRequest::builder()
-        .build()
-        .map_err(|e| format!("Error creating notarization request: {}", e.to_string()))?;
+        // Start a local simple notary service
+        tokio::spawn(run_dummy_notary(notary_socket.compat()));
 
-    let Accepted {
-        io: notary_connection,
-        id: session_id,
-        ..
-    } = notary_client
-        .request_notarization(notarization_request)
-        .await
-        .map_err(|e| format!("Error requesting notarization: {}", e))?;
+        // A Prover configuration
+        let config = ProverConfig::builder()
+            .id("example")
+            .server_dns(SERVER_DOMAIN)
+            .build()
+            .unwrap();
 
-    // Configure a new prover with the unique session id returned from notary client.
-    let prover_config = ProverConfig::builder()
-        .id(session_id)
-        .server_dns(SERVER_DOMAIN)
-        .build()
-        .map_err(|e| format!("Error creating prover configuration: {}", e))?;
+        // Create a Prover and set it up with the Notary
+        // This will set up the MPC backend prior to connecting to the server.
+        Prover::new(config)
+            .setup(prover_socket.compat())
+            .await
+            .unwrap()
+    } else {
+        // Build a client to connect to the notary server.
+        let notary_client = NotaryClient::builder()
+            .host(NOTARY_HOST)
+            .port(NOTARY_PORT)
+            .path(NOTARY_PATH)
+            .enable_tls(true)
+            .build()
+            .unwrap();
 
-    // Create a new prover and set up the MPC backend.
-    let prover = Prover::new(prover_config)
-        .setup(notary_connection.compat())
-        .await
-        .map_err(|e| format!("Error setting up prover: {}", e))?;
+        // Send requests for configuration and notarization to the notary server.
+        let notarization_request = NotarizationRequest::builder()
+            .build()
+            .map_err(|e| format!("Error creating notarization request: {}", e.to_string()))?;
+
+        let Accepted {
+            io: notary_connection,
+            id: session_id,
+            ..
+        } = notary_client
+            .request_notarization(notarization_request)
+            .await
+            .map_err(|e| format!("Error requesting notarization: {}", e))?;
+
+        // Configure a new prover with the unique session id returned from notary client.
+        let prover_config = ProverConfig::builder()
+            .id(session_id)
+            .server_dns(SERVER_DOMAIN)
+            .build()
+            .map_err(|e| format!("Error creating prover configuration: {}", e))?;
+
+        // Create a new prover and set up the MPC backend.
+        Prover::new(prover_config)
+            .setup(notary_connection.compat())
+            .await
+            .map_err(|e| format!("Error setting up prover: {}", e))?
+    };
 
     debug!("Prover setup complete!");
     // Open a new socket to the application server.
@@ -477,4 +511,20 @@ fn generate_request(
         .header("anthropic-version", "2023-06-01")
         .body(json_body.to_string())
         .map_err(|e| format!("Error building request: {}", e))
+}
+
+/// Runs a simple Notary with the provided connection to the Prover.
+pub async fn run_dummy_notary<T: AsyncWrite + AsyncRead + Send + Unpin + 'static>(conn: T) {
+    // Load the notary signing key
+    let signing_key_str = str::from_utf8(include_bytes!("../../tlsn/notary.key")).unwrap();
+    let signing_key = p256::ecdsa::SigningKey::from_pkcs8_pem(signing_key_str).unwrap();
+
+    // Setup default config. Normally a different ID would be generated
+    // for each notarization.
+    let config = VerifierConfig::builder().id("example").build().unwrap();
+
+    Verifier::new(config)
+        .notarize::<_, p256::ecdsa::Signature>(conn, &signing_key)
+        .await
+        .unwrap();
 }
