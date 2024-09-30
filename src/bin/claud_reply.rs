@@ -16,10 +16,12 @@ use tokio::io::AsyncWriteExt as _;
 use tokio::task::JoinHandle;
 use tokio_util::compat::{FuturesAsyncReadCompatExt, TokioAsyncReadCompatExt};
 use tracing::debug;
+use tracing::log::info;
 
 // Setting of the application server
 const SERVER_DOMAIN: &str = "api.anthropic.com";
 const ROUTE: &str = "/v1/messages";
+const SETUP_PROMPT: &str = "Setup Prompt: YOU ARE GOING TO BE ACTING AS A HELPFUL ASSISTANT";
 
 // Setting of the notary server — make sure these are the same with the config in ../../../notary/server
 const NOTARY_HOST: &str = "0.0.0.0";
@@ -35,15 +37,19 @@ async fn main() {
     let mut request_index = 1;
 
 
-    while request_index < 3 {
-
-        // Prompt the user to provide a message to send to the assistant
-        println!("Please provide a message to send to the assistant:");
-        println!("(Type 'exit' or press Enter to exit the conversation)");
-        #[allow(unused)]
+    loop {
+        
         let mut user_message = String::new();
-        user_message = "Tell me something new in 2 words!".to_string();
-        // std::io::stdin().read_line(&mut user_message).unwrap();
+        if request_index == 1 {
+            user_message = SETUP_PROMPT.to_string();
+            debug!("Sending setup prompt to OpenAI API: {}", user_message);
+            // TODO - consider how to make it optional and not get a timeout error
+        } else {
+            // Prompt the user to provide a message to send to the assistant
+            info!("Please provide a message to send to the assistant:");
+            info!("(Type 'exit' or press Enter to exit the conversation)");
+            std::io::stdin().read_line(&mut user_message).unwrap();
+        }
 
         if user_message.trim().is_empty() || user_message.trim() == "exit" {
             break;
@@ -124,7 +130,8 @@ async fn main() {
         serde_json::from_str::<serde_json::Value>(&String::from_utf8_lossy(&payload)).unwrap();
 
     // Pretty printing the response
-    debug!("Shutdown response: {}", serde_json::to_string_pretty(&parsed).unwrap());
+    // TODO - do another shutdown request that doesn't return an error
+    debug!("Shutdown response (expeted error): {}", serde_json::to_string_pretty(&parsed).unwrap());
 
 
     // Notarize the session
