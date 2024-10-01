@@ -66,7 +66,7 @@ pub async fn generate_conversation_attribution() -> Result<(), Box<dyn Error>> {
     println!("📝 When you're done, simply type 'exit' or press Enter without typing a message to end the conversation.");
     println!("🔒 Once finished, a proof of the conversation will be generated.");
     println!("💾 The proof will be saved as 'claude_conversation_proof.json' for your records.");
-    println!("✨ Let's get started! Begin by sending your first message.");
+    println!("✨ Let's get started! Once the setup is complete, you can begin the conversation.\n");
 
     loop {
         let mut user_message = String::new();
@@ -75,7 +75,7 @@ pub async fn generate_conversation_attribution() -> Result<(), Box<dyn Error>> {
             debug!("Sending setup prompt to Anthropic API: {}", user_message);
             // TODO - consider how to make it optional and not get a timeout error
         } else {
-            println!("💬 Your message\n(type 'exit' to end): ");
+            println!("\n💬 Your message\n(type 'exit' to end): ");
 
             print!("> ");
             std::io::stdout().flush()?; // Ensure the prompt is displayed before reading input
@@ -156,10 +156,12 @@ pub async fn generate_conversation_attribution() -> Result<(), Box<dyn Error>> {
             json!({"role": "assistant", "content": parsed["content"][0]["text"]});
         messages.push(received_assistant_message);
 
-        println!(
-            "🤖 Assistant's response:\n\n{}",
-            parsed["content"][0]["text"]
-        );
+        if request_index != 1 {
+            println!(
+                "\n🤖 Assistant's response:\n\n{}\n",
+                parsed["content"][0]["text"]
+            );
+        }
 
         request_index += 1;
     }
@@ -414,7 +416,8 @@ async fn setup_connections() -> Result<
     String,
 > {
     let prover = if cfg!(feature = "dummy-notary") {
-        println!("🚨 WARNING: Dummy notary is used for testing purposes only. It is not secure and should not be used in production.");
+        println!("🚨 WARNING: Running in a test mode.");
+        println!("🚨 WARNING: Authenticating output with a local dummy notary, which is not secure and should not be used in production.");
         let (prover_socket, notary_socket) = tokio::io::duplex(1 << 16);
 
         // Start a local simple notary service
