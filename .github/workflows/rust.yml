@@ -92,62 +92,64 @@ jobs:
       run: ./passport-for-ai remote verify-attribution claud_conversation_proof.json
 
   release:
-      runs-on: ${{ matrix.os }}
-      strategy:
-        matrix:
-          include:
-            - os: ubuntu-latest
-              target: x86_64-unknown-linux-gnu
-            - os: ubuntu-latest
-              target: aarch64-unknown-linux-gnu
-            - os: macos-latest
-              target: x86_64-apple-darwin
+#    needs: [test-local, test-remote]
+#    if: github.event.inputs.release_version != ''
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        include:
+          - os: ubuntu-latest
+            target: x86_64-unknown-linux-gnu
+          - os: ubuntu-latest
+            target: aarch64-unknown-linux-gnu
+          - os: macos-latest
+            target: x86_64-apple-darwin
 
-      steps:
-      - name: Checkout repository
-        uses: actions/checkout@v2
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v2
 
-      - name: Install Rust
-        uses: actions-rs/toolchain@v1
-        with:
-          toolchain: stable
+    - name: Install Rust
+      uses: actions-rs/toolchain@v1
+      with:
+        toolchain: stable
 
-      - name: Install cross for aarch64
-        if: matrix.target == 'aarch64-unknown-linux-gnu'
-        run: cargo install cross
+    - name: Install cross for aarch64
+      if: matrix.target == 'aarch64-unknown-linux-gnu'
+      run: cargo install cross
 
-      - name: Install target
-        run: rustup target add ${{ matrix.target }}
+    - name: Install target
+      run: rustup target add ${{ matrix.target }}
 
-      - name: Build for ${{ matrix.target }}
-        run: |
-          if [[ "${{ matrix.target }}" == "aarch64-unknown-linux-gnu" ]]; then
-            cross build --release --target ${{ matrix.target }};
-          else
-            cargo build --release --target ${{ matrix.target }};
-          fi
+    - name: Build for ${{ matrix.target }}
+      run: |
+        if [[ "${{ matrix.target }}" == "aarch64-unknown-linux-gnu" ]]; then
+          cross build --release --target ${{ matrix.target }};
+        else
+          cargo build --release --target ${{ matrix.target }};
+        fi
 
-      - name: Upload release artifacts
-        uses: actions/upload-artifact@v3
-        with:
-          name: release-artifacts-${{ matrix.target }}
-          path: ./target/${{ matrix.target }}/release
+    - name: Upload release artifacts
+      uses: actions/upload-artifact@v3
+      with:
+        name: release-artifacts-${{ matrix.target }}
+        path: ./target/${{ matrix.target }}/release
 
-      - name: Create Release
-        if: github.event.inputs.release_version != ''
-        uses: actions/create-release@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          tag_name: ${{ github.event.inputs.release_version }}
-          release_name: "Release ${{ github.event.inputs.release_version }}"
-          draft: false
-          prerelease: false
+    - name: Create Release
+      if: github.event.inputs.release_version != ''
+      uses: actions/create-release@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        tag_name: ${{ github.event.inputs.release_version }}
+        release_name: "Release ${{ github.event.inputs.release_version }}"
+        draft: false
+        prerelease: false
 
-      - name: Upload Executable Binaries
-        uses: actions/upload-release-asset@v1
-        with:
-          upload_url: ${{ steps.create_release.outputs.upload_url }}
-          asset_path: ./target/${{ matrix.target }}/release/your-executable
-          asset_name: your-executable-${{ matrix.target }}
-          asset_content_type: application/octet-stream
+    - name: Upload Executable Binaries
+      uses: actions/upload-release-asset@v1
+      with:
+        upload_url: ${{ steps.create_release.outputs.upload_url }}
+        asset_path: ./target/${{ matrix.target }}/release/passport-for-ai
+        asset_name: passport-for-ai-${{ matrix.target }}
+        asset_content_type: application/octet-stream
