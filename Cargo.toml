@@ -39,7 +39,7 @@ tracing = { version = "0.1", optional = true }
 tracing-subscriber = { version = "0.3", optional = true }
 
 [features]
-default = ["remote", "local"]
+default = ["dummy-notary", "local"]
 local = ["ezkl", "temp-dir", "sha3", "base64"]
 remote = ["tlsn-core", "tlsn-prover", "tlsn-verifier", "notary-client", "dotenv", "hyper", "hyper-util", "http-body-util", "tokio-util", "tracing", "tracing-subscriber", "spansy", "tlsn-formats", "p256", "futures"]
 dummy-notary = ["remote"]
