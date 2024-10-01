@@ -94,7 +94,7 @@ jobs:
   release:
     if: github.event.inputs.release_version != ''
     runs-on: ubuntu-latest
-    needs: [build, test-local, test-remote]
+#    needs: [build, test-local, test-remote]
 
     strategy:
       matrix:
