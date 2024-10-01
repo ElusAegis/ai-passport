@@ -40,7 +40,7 @@ jobs:
       uses: actions/upload-artifact@v3
       with:
         name: build-artifacts
-        path: target/release
+        path: target/release/passport-for-ai
 
   test-local:
     needs: build
@@ -56,13 +56,13 @@ jobs:
         name: build-artifacts
 
     - name: Run local `create-passport`
-      run: target/release/passport-for-ai local create-passport model/network.onnx --save-to ./model
+      run: passport-for-ai local create-passport model/network.onnx --save-to ./model
 
     - name: Run local `attribute-content`
-      run: target/release/passport-for-ai local attribute-content model/network.onnx model/input.json --save-to ./model
+      run: passport-for-ai local attribute-content model/network.onnx model/input.json --save-to ./model
 
     - name: Run local `verify-attribution`
-      run: target/release/passport-for-ai local verify-attribution model/model_network_db9e2eef_passport.json model/model_db9e2eef_attribution_certificate.json
+      run: passport-for-ai local verify-attribution model/model_network_db9e2eef_passport.json model/model_db9e2eef_attribution_certificate.json
 
   test-remote:
     needs: build
@@ -76,26 +76,14 @@ jobs:
       uses: actions/download-artifact@v3
       with:
         name: build-artifacts
-        
-    - name: List build artifacts
-      run: ls -la .
-      
-    - name: List build artifacts
-      run: ls -la target/
-      
-    - name: List build artifacts
-      run: ls -la build-artifacts/
-
-    - name: List build artifacts
-      run: ls -la target/release/
 
     - name: Run remote `anthropic-conversation`
-      run: echo "Hello Claud\nexit\n" | target/release/passport-for-ai remote anthropic-conversation
+      run: echo "Hello Claud\nexit\n" | passport-for-ai remote anthropic-conversation
       env:
         ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
 
     - name: Run remote `verify-attribution`
-      run: target/release/passport-for-ai remote verify-attribution claud_conversation_proof.json
+      run: passport-for-ai remote verify-attribution claud_conversation_proof.json
 
   release:
     if: github.event.inputs.release_version != ''
