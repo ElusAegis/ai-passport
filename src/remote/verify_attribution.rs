@@ -80,6 +80,7 @@ pub fn verify_attribution(proof_path: &str) -> Result<(), Box<dyn std::error::Er
 fn notary_pubkey() -> Result<p256::PublicKey, String> {
     let pem_file = str::from_utf8(include_bytes!("../../tlsn/notary.pub"))
         .map_err(|e| format!("Failed to read Notary pubkey: {}", e))?;
-    Ok(p256::PublicKey::from_public_key_pem(pem_file)
-        .map_err(|e| format!("Failed to parse Notary pubkey: {}", e))?)
+
+    p256::PublicKey::from_public_key_pem(pem_file)
+        .map_err(|e| format!("Failed to parse Notary pubkey: {}", e))
 }
