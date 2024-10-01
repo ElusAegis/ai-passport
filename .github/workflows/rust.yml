@@ -59,13 +59,13 @@ jobs:
       run: chmod +x passport-for-ai
 
     - name: Run local `create-passport`
-      run: passport-for-ai local create-passport model/network.onnx --save-to ./model
+      run: ./passport-for-ai local create-passport model/network.onnx --save-to ./model
 
     - name: Run local `attribute-content`
-      run: passport-for-ai local attribute-content model/network.onnx model/input.json --save-to ./model
+      run: ./passport-for-ai local attribute-content model/network.onnx model/input.json --save-to ./model
 
     - name: Run local `verify-attribution`
-      run: passport-for-ai local verify-attribution model/model_network_db9e2eef_passport.json model/model_db9e2eef_attribution_certificate.json
+      run: ./passport-for-ai local verify-attribution model/model_network_db9e2eef_passport.json model/model_db9e2eef_attribution_certificate.json
 
   test-remote:
     needs: build
@@ -84,12 +84,12 @@ jobs:
       run: chmod +x passport-for-ai
 
     - name: Run remote `anthropic-conversation`
-      run: echo "Hello Claud\nexit\n" | passport-for-ai remote anthropic-conversation
+      run: echo "Hello Claud\nexit\n" | ./passport-for-ai remote anthropic-conversation
       env:
         ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
 
     - name: Run remote `verify-attribution`
-      run: passport-for-ai remote verify-attribution claud_conversation_proof.json
+      run: ./passport-for-ai remote verify-attribution claud_conversation_proof.json
 
   release:
     if: github.event.inputs.release_version != ''
