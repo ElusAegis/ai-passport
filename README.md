@@ -273,7 +273,7 @@ content of the communication.
 
 ![Remote Operations](docs/centralized_id_diagram.png)
 
-### Step 1: Interact with Anthropic's API and Generate a Proof
+### Step 1: Interact with Anthropic's API and Generate an Attribution Proof
 
 Engage in a conversation with an AI assistant (e.g., Anthropic's Claude) and generate a cryptographic proof of the
 conversation.
@@ -323,13 +323,88 @@ After the conversation:
 📂 Simply upload the proof, and anyone can verify its authenticity and inspect the details.
 ```
 
-### Verifying the Proof
+### Step 2: Verify the Attribution
 
-You can verify the execution of the model and inspect the conversation by uploading the proof file to
-the [TLSNotary Explorer](https://explorer.tlsnotary.org/). This allows you and others to:
+You can verify the cryptographic proof of a remote AI interaction using two methods: via the TLSNotary Explorer website
+or locally through the command-line interface.
 
-- **Verify Authenticity**: Confirm that the conversation took place exactly as recorded.
-- **Inspect Details**: View the messages exchanged during the conversation.
+#### **Option 1: Website Verification**
+
+To verify the proof using the TLSNotary website, follow these steps:
+
+1. After generating the proof (e.g., `claude_conversation_proof.json`), navigate to
+   the [TLSNotary Explorer](https://explorer.tlsnotary.org/).
+2. Upload the JSON proof file to the site.
+3. The website will analyze the proof and provide confirmation that the conversation occurred exactly as recorded,
+   showing details about the interaction (e.g., timestamps, API requests, and responses).
+
+This method is ideal for quick, third-party verification of AI outputs and interactions with remote models.
+
+#### **Option 2: Local Verification**
+
+To verify the proof locally, use the following command:
+
+**Command**:
+
+```bash
+cargo run --release -- remote verify-attribution claud_conversation_proof.json
+```
+
+**Explanation**:
+
+- `remote`: Specifies that the operation is for a remote model or service.
+- `verify-attribution`: The command to verify the attribution proof.
+- `claude_conversation_proof.json`: The path to the proof file generated in Step 1.
+
+**What It Does**:
+
+- **Extracts the proof details** from the JSON file.
+- **Verifies the proof** using the TLSNotary library.
+- **Outputs a success message** if verification passes.
+- **Displays the conversation details** (timestamps, API requests, and responses) if verification is successful.
+
+**Sample Output**:
+
+```
+Successfully verified that the bytes below came from a session with Dns("api.anthropic.com") at 2024-10-01 10:25:49 UTC.
+Note that the bytes which the Prover chose not to disclose are shown as X.
+
+Messages sent:
+
+POST /v1/messages HTTP/1.1
+host: api.anthropic.com
+accept-encoding: identity
+connection: keep-alive
+content-type: application/json
+x-api-key: XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
+anthropic-version: 2023-06-01
+content-length: 161
+
+{"max_tokens":1024,"messages":[{"content":"Setup Prompt: YOU ARE GOING TO BE ACTING AS A HELPFUL ASSISTANT","role":"user"}],"model":"claude-3-5-sonnet-20240620"}
+
+Messages received:
+
+HTTP/1.1 200 OK
+Date: XXXXXXXXXXXXXXXXXXXXXXXXXXXXX
+Content-Type: application/json
+Content-Length: 451
+Connection: keep-alive
+anthropic-ratelimit-requests-limit: 50
+anthropic-ratelimit-requests-remaining: 49
+anthropic-ratelimit-requests-reset: XXXXXXXXXXXXXXXXXXXX
+anthropic-ratelimit-tokens-limit: 40000
+anthropic-ratelimit-tokens-remaining: 40000
+anthropic-ratelimit-tokens-reset: XXXXXXXXXXXXXXXXXXXX
+request-id: XXXXXXXXXXXXXXXXXXXXXXXXXXXX
+x-cloud-trace-context: XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
+via: 1.1 google
+CF-Cache-Status: DYNAMIC
+X-Robots-Tag: none
+Server: cloudflare
+CF-RAY: XXXXXXXXXXXXXXXXXXXX
+
+{"id":"msg_013u9zLkoym1AVARYQ8GhDWF","type":"message","role":"assistant","model":"claude-3-5-sonnet-20240620","content":[{"type":"text","text":"Certainly! I'm here to assist you with any questions, tasks, or information you need. As a helpful assistant, I'll do my best to provide accurate, useful, and friendly responses. What can I help you with today?"}],"stop_reason":"end_turn","stop_sequence":null,"usage":{"input_tokens":25,"output_tokens":51}}
+```
 
 ---
 

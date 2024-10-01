@@ -73,7 +73,17 @@ async fn main() -> Result<(), Box<dyn Error>> {
                 .about("Operations for remote models")
                 .subcommand(
                     Command::new("anthropic-conversation")
-                        .about("Interact with the Anthropic API to generate a proof of conversation"),
+                        .about("Interact with the Anthropic API to generate an attribution proof of conversation"),
+                )
+                .subcommand(
+                    Command::new("verify-attribution")
+                        .about("Verifies the cryptographic proof for a remote model")
+                        .arg(
+                            Arg::new("proof_path")
+                                .help("Path to the JSON proof file")
+                                .required(true)
+                                .index(1),
+                        ),
                 ),
         )
         .get_matches();
@@ -132,9 +142,13 @@ async fn main() -> Result<(), Box<dyn Error>> {
                 .subcommand_matches("anthropic-conversation")
                 .is_some()
             {
-                remote::generate_proof_of_conversation()
+                remote::generate_conversation_attribution()
                     .await
                     .map_err(|err| format!("Error during conversation: {}", err))?;
+            } else if let Some(matches) = remote_matches.subcommand_matches("verify-attribution") {
+                let proof_path = matches.get_one::<String>("proof_path").unwrap();
+                remote::verify_attribution(proof_path)
+                    .map_err(|err| format!("Error verifying attribution: {}", err))?;
             } else {
                 eprintln!("Error: The specified remote feature is not available yet. Currently, only 'anthropic-conversation' is supported.");
                 std::process::exit(1);
