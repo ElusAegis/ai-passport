@@ -17,7 +17,7 @@ use tlsn_verifier::tls::{Verifier, VerifierConfig};
 use tokio::io::AsyncWriteExt as _;
 use tokio::task::JoinHandle;
 use tokio_util::compat::{FuturesAsyncReadCompatExt, TokioAsyncReadCompatExt};
-use tracing::{debug, info};
+use tracing::debug;
 
 // Setting of the application server
 const SERVER_DOMAIN: &str = "api.anthropic.com";
@@ -59,16 +59,16 @@ pub async fn generate_conversation_attribution() -> Result<(), Box<dyn std::erro
     let mut sent_private_data = vec![];
 
     // Print the rules on how to use the application
-    info!("🌟 Welcome to the Anthropic Prover CLI! 🌟");
-    info!(
+    println!("🌟 Welcome to the Anthropic Prover CLI! 🌟");
+    println!(
         "This application will interact with the Anthropic API to generate a cryptographic proof of your conversation."
     );
-    info!("💬 First, you will engage in a conversation with the assistant.");
-    info!("The assistant will respond to your messages in real time.");
-    info!("📝 When you're done, simply type 'exit' or press Enter without typing a message to end the conversation.");
-    info!("🔒 Once finished, a proof of the conversation will be generated.");
-    info!("💾 The proof will be saved as 'claude_conversation_proof.json' for your records.");
-    info!("✨ Let's get started! Begin by sending your first message.");
+    println!("💬 First, you will engage in a conversation with the assistant.");
+    println!("The assistant will respond to your messages in real time.");
+    println!("📝 When you're done, simply type 'exit' or press Enter without typing a message to end the conversation.");
+    println!("🔒 Once finished, a proof of the conversation will be generated.");
+    println!("💾 The proof will be saved as 'claude_conversation_proof.json' for your records.");
+    println!("✨ Let's get started! Begin by sending your first message.");
 
     loop {
         let mut user_message = String::new();
@@ -77,15 +77,15 @@ pub async fn generate_conversation_attribution() -> Result<(), Box<dyn std::erro
             debug!("Sending setup prompt to Anthropic API: {}", user_message);
             // TODO - consider how to make it optional and not get a timeout error
         } else {
-            info!("💬 Your message\n(type 'exit' to end): ");
+            println!("💬 Your message\n(type 'exit' to end): ");
 
             print!("> "); // Simple user prompt indicator like a terminal prompt.
             std::io::stdin().read_line(&mut user_message).unwrap();
-            print!("");
+            println!("processing...");
         }
 
         if user_message.trim().is_empty() || user_message.trim() == "exit" {
-            info!("🔒 Generating a cryptographic proof of the conversation. Please wait...");
+            println!("🔒 Generating a cryptographic proof of the conversation. Please wait...");
             break;
         }
 
@@ -156,7 +156,7 @@ pub async fn generate_conversation_attribution() -> Result<(), Box<dyn std::erro
             json!({"role": "assistant", "content": parsed["content"][0]["text"]});
         messages.push(received_assistant_message);
 
-        info!(
+        println!(
             "🤖 Assistant's response:\n\n{}",
             parsed["content"][0]["text"]
         );
@@ -189,8 +189,8 @@ pub async fn generate_conversation_attribution() -> Result<(), Box<dyn std::erro
         .await
         .unwrap();
 
-    info!("✅ Proof successfully saved to `claude_conversation_proof.json`.");
-    info!(
+    println!("✅ Proof successfully saved to `claude_conversation_proof.json`.");
+    println!(
         "\n🔍 You can share this proof or inspect it at: https://explorer.tlsnotary.org/.\n\
         📂 Simply upload the proof, and anyone can verify its authenticity and inspect the details."
     );
@@ -201,8 +201,8 @@ pub async fn generate_conversation_attribution() -> Result<(), Box<dyn std::erro
 
         // Dummy notary is used for testing purposes only
         // It is not secure and should not be used in production
-        info!("🚨 PUBLIC KEY: \n{}", public_key);
-        info!("🚨 WARNING: Dummy notary is used for testing purposes only. It is not secure and should not be used in production.");
+        println!("🚨 PUBLIC KEY: \n{}", public_key);
+        println!("🚨 WARNING: Dummy notary is used for testing purposes only. It is not secure and should not be used in production.");
     }
 
     Ok(())
@@ -396,7 +396,7 @@ async fn setup_connections() -> Result<
     String,
 > {
     let prover = if cfg!(feature = "dummy-notary") {
-        info!("🚨 WARNING: Dummy notary is used for testing purposes only. It is not secure and should not be used in production.");
+        println!("🚨 WARNING: Dummy notary is used for testing purposes only. It is not secure and should not be used in production.");
         let (prover_socket, notary_socket) = tokio::io::duplex(1 << 16);
 
         // Start a local simple notary service
