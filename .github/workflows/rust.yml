@@ -55,6 +55,9 @@ jobs:
       with:
         name: build-artifacts
 
+    - name: Change permissions for the binary
+      run: chmod +x passport-for-ai
+
     - name: Run local `create-passport`
       run: passport-for-ai local create-passport model/network.onnx --save-to ./model
 
@@ -76,6 +79,9 @@ jobs:
       uses: actions/download-artifact@v3
       with:
         name: build-artifacts
+
+    - name: Change permissions for the binary
+      run: chmod +x passport-for-ai
 
     - name: Run remote `anthropic-conversation`
       run: echo "Hello Claud\nexit\n" | passport-for-ai remote anthropic-conversation
