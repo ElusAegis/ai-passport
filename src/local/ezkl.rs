@@ -111,12 +111,13 @@ pub(super) async fn verify_proof(
     proof_path: &Path,
     settings_path: &Path,
     vk_path: &Path,
+    srs_path: &Path,
 ) -> Result<String, EZKLError> {
     let verify_command = Commands::Verify {
         settings_path: Some(settings_path.to_path_buf()),
         proof_path: Some(proof_path.to_path_buf()),
         vk_path: Some(vk_path.to_path_buf()),
-        srs_path: None,
+        srs_path: Some(srs_path.to_path_buf()),
         reduced_srs: Some(false),
     };
     run(verify_command).await

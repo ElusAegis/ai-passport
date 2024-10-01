@@ -1,4 +1,4 @@
-use crate::local::ezkl::verify_proof;
+use crate::local::ezkl::{get_srs, verify_proof};
 use crate::local::generate_model_identity;
 use serde_json::Value;
 use std::error::Error;
@@ -31,6 +31,7 @@ pub async fn verify_attribution(
     let settings_path = tmp_dir.path().join("settings.json");
     let vk_path = tmp_dir.path().join("vk.key");
     let proof_path = tmp_dir.path().join("proof.json");
+    let srs_path = tmp_dir.path().join("kzg.srs");
 
     // Extract data from the attribution certificate
     let attribution_certificate_data = std::fs::read_to_string(attribution_certificate_path)?;
@@ -98,12 +99,17 @@ pub async fn verify_attribution(
         .map_err(|e| format!("Error saving settings to file: {}", e))?;
     std::fs::write(&vk_path, vk_bytes).map_err(|e| format!("Error saving VK to file: {}", e))?;
 
-    // Step 2: Verify the proof using `run`
-    verify_proof(&proof_path, &settings_path, &vk_path)
+    // Step 2: Generate the SRS
+    get_srs(&settings_path, &srs_path)
+        .await
+        .map_err(|e| format!("Error generating SRS: {}", e))?;
+
+    // Step 3: Verify the proof using `run`
+    verify_proof(&proof_path, &settings_path, &vk_path, &srs_path)
         .await
         .map_err(|e| format!("Error verifying the proof: {}", e))?;
 
-    // Step 3: Verify model ID with the attribution certificate
+    // Step 4: Verify model ID with the attribution certificate
     println!("Weight hash: {}", weights_hash);
     let verified_model_identity =
         generate_model_identity(None, Some(weights_hash), &settings_path, &vk_path)
@@ -112,7 +118,7 @@ pub async fn verify_attribution(
         .unique_indentifier()
         .map_err(|e| format!("Error hashing model identity: {}", e))?;
 
-    // Step 4: Extract the model ID from the model's passport
+    // Step 5: Extract the model ID from the model's passport
     let model_identity_in_passport =
         extract_model_id_from_passport(model_passport_path).map_err(|e| {
             format!(
@@ -121,7 +127,7 @@ pub async fn verify_attribution(
             )
         })?;
 
-    // Step 5: Compare the model ID from the model's passport with the one in the attribution certificate
+    // Step 6: Compare the model ID from the model's passport with the one in the attribution certificate
     if verified_model_identity_hash == model_identity_in_passport {
         println!("Model ID verification succeeded. The passport model indeed generated the stated output.");
         println!("======================================================");
