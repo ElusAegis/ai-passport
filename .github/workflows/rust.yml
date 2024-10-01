@@ -48,11 +48,19 @@ jobs:
       with:
         toolchain: nightly
 
-    - name: Run `create-passport`
-      run: cargo run --release -- create-passport --local model/network.onnx --save-to ./model
+    - name: Run local `create-passport`
+      run: cargo run --release -- local create-passport model/network.onnx --save-to ./model
 
-    - name: Run `attribute-content`
-      run: cargo run --release -- attribute-content --local model/network.onnx model/input.json --save-to ./model
+    - name: Run local `attribute-content`
+      run: cargo run --release -- local attribute-content model/network.onnx model/input.json --save-to ./model
 
-    - name: Run `verify-attribution`
-      run: cargo run --release -- verify-attribution model/model_network_db9e2eef_passport.json model/model_db9e2eef_attribution_certificate.json
+    - name: Run local `verify-attribution`
+      run: cargo run --release -- local verify-attribution model/model_network_db9e2eef_passport.json model/model_db9e2eef_attribution_certificate.json
+
+    - name: Run remote `anthropic-conversation`
+      run: echo "Hello Claud\nexit\n" | cargo run --release -- remote anthropic-conversation
+      with:
+        .env: ${{ secrets.ANTHROPIC_API_KEY }}
+
+    - name: Run remote `verify-attribution`
+      run: cargo run --release -- remote verify-attribution claud_conversation_proof.json
