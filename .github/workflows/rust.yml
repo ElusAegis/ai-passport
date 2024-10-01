@@ -90,11 +90,12 @@ jobs:
 
     - name: Run remote `verify-attribution`
       run: ./passport-for-ai remote verify-attribution claud_conversation_proof.json
+
+
   release:
       runs-on: ${{ matrix.os }}
       strategy:
         matrix:
-          os: [ubuntu-latest, macos-latest]
           include:
             - os: ubuntu-latest
               target: x86_64-unknown-linux-gnu
@@ -112,9 +113,8 @@ jobs:
         with:
           toolchain: stable
 
-      - name: Install macOS target
-        if: matrix.os == 'macos-latest'
-        run: rustup target add x86_64-apple-darwin
+      - name: Install target
+        run: rustup target add ${{ matrix.target }}
 
       - name: Build for ${{ matrix.target }}
         run: cargo build --release --target ${{ matrix.target }}
