@@ -92,13 +92,14 @@ pub(super) async fn generate_proof(
     pk_path: &Path,
     witness_path: &Path,
     proof_path: &Path,
+    srs_path: &Path,
 ) -> Result<String, EZKLError> {
     let prove_command = Commands::Prove {
         compiled_circuit: Some(compiled_circuit_path.to_path_buf()),
         witness: Some(witness_path.to_path_buf()),
         pk_path: Some(pk_path.to_path_buf()),
         proof_path: Some(proof_path.to_path_buf()),
-        srs_path: None,
+        srs_path: Some(srs_path.to_path_buf()),
         proof_type: Default::default(),
         check_mode: None,
     };

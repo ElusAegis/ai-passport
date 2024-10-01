@@ -55,9 +55,15 @@ pub async fn prove_attribution(
         .map_err(|e| format!("Error generating the witness: {}", e))?;
 
     // Step 6: Generate the proof
-    generate_proof(&compiled_model_path, &pk_path, &witness_path, &proof_path)
-        .await
-        .map_err(|e| format!("Error generating the proof: {}", e))?;
+    generate_proof(
+        &compiled_model_path,
+        &pk_path,
+        &witness_path,
+        &proof_path,
+        &srs_path,
+    )
+    .await
+    .map_err(|e| format!("Error generating the proof: {}", e))?;
 
     // Generate the attribution certificate (JSON)
     let output_dir = save_to_path.unwrap_or_else(|| Path::new("."));
