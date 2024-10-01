@@ -109,6 +109,9 @@ jobs:
       with:
         toolchain: stable
 
+    - name: Install macOS target
+      run: rustup target add x86_64-apple-darwin
+
     - name: Install cross for building multiple targets
       run: cargo install cross
 
