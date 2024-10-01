@@ -7,6 +7,8 @@ use hyper_util::rt::TokioIo;
 use notary_client::{Accepted, NotarizationRequest, NotaryClient};
 use p256::pkcs8::DecodePrivateKey;
 use serde_json::json;
+use std::error::Error;
+use std::io::Write;
 use std::ops::Range;
 use std::{env, str};
 use tlsn_core::commitment::CommitmentId;
@@ -37,15 +39,11 @@ const NOTARY_HOST: &str = "notary.pse.dev";
 const NOTARY_PORT: u16 = 443;
 const NOTARY_PATH: &str = "v0.1.0-alpha.6";
 
-pub async fn generate_conversation_attribution() -> Result<(), Box<dyn std::error::Error>> {
+pub async fn generate_conversation_attribution() -> Result<(), Box<dyn Error>> {
     // Initialize the logger
     tracing_subscriber::fmt::init();
 
-    // Load secret variables from environment for Anthropic API connection, otherwise return an error
-    dotenv::dotenv().ok();
-    let api_key = env::var("ANTHROPIC_API_KEY").map_err(|_| {
-        "Please set the ANTHROPIC_API_KEY environment variable to connect to the Anthropic API."
-    })?;
+    let api_key = load_api_key()?;
 
     let (prover_ctrl, prover_task, mut request_sender) = setup_connections()
         .await
@@ -79,7 +77,9 @@ pub async fn generate_conversation_attribution() -> Result<(), Box<dyn std::erro
         } else {
             println!("💬 Your message\n(type 'exit' to end): ");
 
-            print!("> "); // Simple user prompt indicator like a terminal prompt.
+            print!("> ");
+            std::io::stdout().flush()?; // Ensure the prompt is displayed before reading input
+
             std::io::stdin().read_line(&mut user_message).unwrap();
             println!("processing...");
         }
@@ -206,6 +206,24 @@ pub async fn generate_conversation_attribution() -> Result<(), Box<dyn std::erro
     }
 
     Ok(())
+}
+
+fn load_api_key() -> Result<String, Box<dyn Error>> {
+    dotenv::dotenv().ok();
+    match env::var("ANTHROPIC_API_KEY") {
+        Ok(api_key) => Ok(api_key),
+        Err(_) => {
+            println!("🔑 The `ANTHROPIC_API_KEY` environment variable is not set.");
+            println!("If you do not have an API key, you can sign up for one at:");
+            println!("https://docs.anthropic.com/en/api/getting-started");
+            print!("Please enter your Anthropic API key: ");
+            std::io::stdout().flush()?; // Ensure the prompt is displayed before reading input
+
+            let mut api_key_input = String::new();
+            std::io::stdin().read_line(&mut api_key_input)?;
+            Ok(api_key_input.trim().to_string())
+        }
+    }
 }
 
 async fn shutdown_connection(

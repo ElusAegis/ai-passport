@@ -76,6 +76,15 @@ jobs:
       uses: actions/download-artifact@v3
       with:
         name: build-artifacts
+        
+    - name: List build artifacts
+      run: ls -la .
+      
+    - name: List build artifacts
+      run: ls -la target/
+      
+    - name: List build artifacts
+      run: ls -la build-artifacts/
 
     - name: List build artifacts
       run: ls -la target/release/
