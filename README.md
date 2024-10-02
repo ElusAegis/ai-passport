@@ -2,77 +2,145 @@
 
 ## Introduction
 
-**AI Passport** is a system that generates unique cryptographic passports for machine learning models and verifies that outputs are genuinely produced by those models. By leveraging advanced cryptographic techniques—including Zero-Knowledge Proofs via the [EZKL](https://docs.ezkl.xyz/getting_started/) library for local models and [TLSNotary](https://tlsnotary.org/about) for remote models—the system provides a robust framework for tracking and authenticating AI-generated content.
+**AI Passport** is a system that generates unique cryptographic passports for machine learning models and verifies that
+outputs are genuinely produced by those models. By leveraging advanced cryptographic techniques—including Zero-Knowledge
+Proofs via the [EZKL](https://docs.ezkl.xyz/getting_started/) library for local models
+and [TLSNotary](https://tlsnotary.org/about) for remote models—the system provides a robust framework for tracking and
+authenticating AI-generated content.
 
-**AI Passport** enhances accountability and transparency in AI systems and supports the efforts in AI Safety and AI Governance by providing a way for anyone to report as well as independently verify the genuality of harmful AI behaviour without relying on centralized authorities. This empowers regular users to collectively track the real picture of the safety of AI models and hold AI providers accountable in case their models start to depict dangreous or harmful behaiovur. This work further supports the compliance efforts to  regulate AI geenrated content and provides a way to validate and verify the content origins and mitigate risks associated with unverifiable or tampered content. 
+**AI Passport** enhances accountability and transparency in AI systems and supports the efforts in AI Safety and AI
+Governance by providing a way for anyone to report as well as independently verify the genuality of harmful AI behaviour
+without relying on centralized authorities. This empowers regular users to collectively track the real picture of the
+safety of AI models and hold AI providers accountable in case their models start to depict dangreous or harmful
+behaiovur. This work further supports the compliance efforts to regulate AI generated content and provides a way to
+validate and verify the content origins and mitigate risks associated with unverifiable or tampered content.
 
-This work is a practical extension of the theoretical framework outlined in the [IDs for AI Systems](https://arxiv.org/html/2406.12137v1) paper on AI safety. To make this work accessible and practical, we provide two solutions with different security and performance trade-offs, supporting various use cases and deployments, and allowing users to use **AI Passport** with state-of-the-art models such as Claude 3.5 Sonnet.
+This work is a practical extension of the theoretical framework outlined in
+the [IDs for AI Systems](https://arxiv.org/html/2406.12137v1) paper on AI safety. To make this work accessible and
+practical, we provide two solutions with different security and performance trade-offs, supporting various use cases and
+deployments, and allowing users to use **AI Passport** with state-of-the-art models such as Claude 3.5 Sonnet.
 
-The further iteration of AI Passport would be to develop a collective web database to track malicious outputs from AI models and assess each models AI Recurity Rist, while also providing a proof that each of the outputs assessed actually originated from the stated models. This will allow key decision makers can make clear judgment and it would not be possible to cilence them, as well as discard the dangerous model behaviour as one of situation.
+The further iteration of AI Passport would be to develop a collective web database to track malicious outputs from AI
+models and assess each models AI Security Risks, while also providing a proof that each of the outputs assessed actually
+originated from the stated models. This will allow key decision makers can make clear judgment, and it would not be
+possible to cilence them, as well as discard the dangerous model behaviour as one of situation.
 
-> **Note**: This is an experimental project and should be used with caution. It is not intended for production use without further testing and validation.
+<img src="docs/ai_harm_reporting.png" alt="AI Harm Database" width="80%"/>
+
+
+> **Note**: This is an experimental project and should be used with caution. It is not intended for production use
+> without further testing and validation.
 
 ### Motivation
 
-In today's rapidly evolving landscape of artificial intelligence, large language models (LLMs) are increasingly integrated into applications that significantly impact society. These models are employed in diverse domains ranging from customer service automation and content generation to decision-making processes in finance and healthcare. While they offer unprecedented capabilities, their widespread adoption also raises significant concerns about accountability, trust, and safety.
+In today's rapidly evolving landscape of artificial intelligence, large language models (LLMs) are increasingly
+integrated into applications that significantly impact society. These models are employed in diverse domains ranging
+from customer service automation and content generation to decision-making processes in finance and healthcare. While
+they offer unprecedented capabilities, their widespread adoption also raises significant concerns about accountability,
+trust, and safety.
 
-A pressing challenge in the AI community is the inability to track AI-generated content back to the specific models that produced it. This issue becomes critical in scenarios where an AI system generates harmful, misleading, or controversial content—such as disinformation, biased recommendations, or dangerous instructions. Affected parties, researchers, or regulators need reliable methods to authenticate the source of such outputs to hold the appropriate entities accountable and mitigate malicious activities.
+A pressing challenge in the AI community is the inability to track AI-generated content back to the specific models that
+produced it. This issue becomes critical in scenarios where an AI system generates harmful, misleading, or controversial
+content—such as disinformation, biased recommendations, or dangerous instructions. Affected parties, researchers, or
+regulators need reliable methods to authenticate the source of such outputs to hold the appropriate entities accountable
+and mitigate malicious activities.
 
 Existing mechanisms are insufficient for several reasons:
 
-- **Lack of Industry Standard**: Currently, there is no accepted method to track and index the dangers posed by models, authenticate that a particular model produced specific outputs, or monitor threats to gain a comprehensive understanding of a model's overall safety. Evaluations and benchmarks are typically conducted behind closed doors and shared only in limited amounts, with no external means to collect information for a holistic overview.
-- **Misaligned Incentives**: Solutions often rely on centralized platforms provided by AI service providers (e.g., sharing conversation histories through an AI provider's interface). However, these platforms have incentives to alter or remove conversation histories to hide or deny dangerous behaviors exhibited by their models, aiming to protect their interests or reputation.
-- **Lack of Trust**: Without cryptographic guarantees, it is difficult to prove that an AI output has not been tampered with or fabricated by a user. This undermines trust in digital evidence and hampers efforts to address malicious use cases.
-- **Lack of Visibility**: There is no single repository to collect and track AI safety incidents. Information is scattered across platforms like Reddit, Twitter, and other resources, which can get lost, misinterpreted, or devalued.
+- **Lack of Industry Standard**: Currently, there is no accepted method to track and index the dangers posed by models,
+  authenticate that a particular model produced specific outputs, or monitor threats to gain a comprehensive
+  understanding of a model's overall safety. Evaluations and benchmarks are typically conducted behind closed doors and
+  shared only in limited amounts, with no external means to collect information for a holistic overview.
+- **Misaligned Incentives**: Solutions often rely on centralized platforms provided by AI service providers (e.g.,
+  sharing conversation histories through an AI provider's interface). However, these platforms have incentives to alter
+  or remove conversation histories to hide or deny dangerous behaviors exhibited by their models, aiming to protect
+  their interests or reputation.
+- **Lack of Trust**: Without cryptographic guarantees, it is difficult to prove that an AI output has not been tampered
+  with or fabricated by a user. This undermines trust in digital evidence and hampers efforts to address malicious use
+  cases.
+- **Lack of Visibility**: There is no single repository to collect and track AI safety incidents. Information is
+  scattered across platforms like Reddit, Twitter, and other resources, which can get lost, misinterpreted, or devalued.
 
-**AI Passport** addresses these challenges by providing trust-minimized cryptographic methods for users to prove that a particular **AI output was generated by a specific model at a specific time based on a specific prompt**. By generating unique cryptographic passports for machine learning models and enabling the verification of outputs through Zero-Knowledge Proofs and Multi-Party Computations, the system enhances accountability and transparency in both:
+**AI Passport** addresses these challenges by providing trust-minimized cryptographic methods for users to prove that a
+particular **AI output was generated by a specific model at a specific time based on a specific prompt**. By generating
+unique cryptographic passports for machine learning models and enabling the verification of outputs through
+Zero-Knowledge Proofs and Multi-Party Computations, the system enhances accountability and transparency in both:
 
 1. **Local Settings**: Where users run models locally on their machines.
 
-2. **Remote Settings**: Where we can authenticate outputs from large server-hosted models, such as GPT-4, [previously considered impossible](https://github.com/Modulus-Labs/Papers/blob/master/Cost_Of_Intelligence.pdf).
-
+2. **Remote Settings**: Where we can authenticate outputs from large server-hosted models, such as
+   GPT-4, [previously considered impossible](https://github.com/Modulus-Labs/Papers/blob/master/Cost_Of_Intelligence.pdf).
 
 ### Key Benefits
 
-- **Enhanced Accountability**: Provides an indisputable way to prove the authenticity of AI-generated content, allowing users to hold AI providers accountable by providing undeniable proof of the origin of AI outputs. Additionally, it offers the necessary tools to create a shared ledger of all AI safety incidents, verified and confirmed, providing a clear method to track the safety of AI models.
+- **Enhanced Accountability**: Provides an indisputable way to prove the authenticity of AI-generated content, allowing
+  users to hold AI providers accountable by providing undeniable proof of the origin of AI outputs. Additionally, it
+  offers the necessary tools to create a shared ledger of all AI safety incidents, verified and confirmed, providing a
+  clear method to track the safety of AI models.
 
-- **Trustless Verification**: Allows any party to independently verify the authenticity of an AI output without relying on the trustworthiness of the AI provider or intermediaries. This is crucial in a society where trust in authorities is diminishing and polarization is increasing, as highlighted in [recent studies](https://www.researchgate.net/publication/354758972_The_role_of_social_media_in_political_polarization_a_systematic_review).
+- **Trustless Verification**: Allows any party to independently verify the authenticity of an AI output without relying
+  on the trustworthiness of the AI provider or intermediaries. This is crucial in a society where trust in authorities
+  is diminishing and polarization is increasing, as highlighted
+  in [recent studies](https://www.researchgate.net/publication/354758972_The_role_of_social_media_in_political_polarization_a_systematic_review).
 
-- **Privacy Preservation**: Utilizes cryptographic techniques that do not require revealing sensitive information such as users' passwords or secret keys used to communicate with AI providers. It only reveals what is necessary for everyone to know: **which model, based on which prompt, produced which output**.
+- **Privacy Preservation**: Utilizes cryptographic techniques that do not require revealing sensitive information such
+  as users' passwords or secret keys used to communicate with AI providers. It only reveals what is necessary for
+  everyone to know: **which model, based on which prompt, produced which output**.
 
-- **Resistance to Tampering**: Provides strong cryptographic guarantees that make it computationally infeasible to forge or alter proofs, ensuring the integrity of the verification process.
-  
+- **Resistance to Tampering**: Provides strong cryptographic guarantees that make it computationally infeasible to forge
+  or alter proofs, ensuring the integrity of the verification process.
+
 ### Contributions
 
 We have developed a proof of concept that demonstrates how to:
 
-1. **Create a "Passport" for AI Models**: Generate a unique and binding identity for each model, ensuring that any output produced can be authenticated by this passport to prove its origin. This is vital for correlating all outputs produced by the model and evaluating its safety.
+1. **Create a "Passport" for AI Models**: Generate a unique and binding identity for each model, ensuring that any
+   output produced can be authenticated by this passport to prove its origin. This is vital for correlating all outputs
+   produced by the model and evaluating its safety.
 
-2. **Attribute Content to Models**: Given a model, generate the output and a proof such that, with the output, proof, and model passport, one can verify that the output indeed came from the specified model. We call this "attributing content."
+2. **Attribute Content to Models**: Given a model, generate the output and a proof such that, with the output, proof,
+   and model passport, one can verify that the output indeed came from the specified model. We call this "attributing
+   content."
 
-3. **Verify Outputs**: Provide a method to, given an output, proof, and model passport, check that the output comes from the model specified in the passport. Effectively, the passport acts as a model ID, establishing a way to relate the model's output to this ID.
+3. **Verify Outputs**: Provide a method to, given an output, proof, and model passport, check that the output comes from
+   the model specified in the passport. Effectively, the passport acts as a model ID, establishing a way to relate the
+   model's output to this ID.
 
+We support both `local` and `remote` models with different security assumptions and performance characteristics to
+maximize the practicality of our work:
 
-We support both `local` and `remote` models with different security assumptions and performance characteristics to maximize the practicality of our work:
-
-| Mode   | Security                                                                  | Models Supported                     | Computation Cost                                                                  |
-|--------|---------------------------------------------------------------------------|--------------------------------------|-----------------------------------------------------------------------------------|
-| Local  | Strong Security (Zero-Knowledge Proof of model execution, no TTP assumed) | Open-Source Models                   | Very expensive to run (up to GPT-2 mini), quasi-linear with the model size        |
-| Remote | Medium Security (ZKP/MPC of TLS, TTP assumed to serve the model honestly) | Closed-source and Open-Source Models | Fixed cost (e.g., GPT-4); model size does not affect computation cost             |
-
+| Mode   | Security                                                                  | Models Supported                     | Computation Cost                                                           |
+|--------|---------------------------------------------------------------------------|--------------------------------------|----------------------------------------------------------------------------|
+| Local  | Strong Security (Zero-Knowledge Proof of model execution, no TTP assumed) | Open-Source Models                   | Very expensive to run (up to GPT-2 mini), quasi-linear with the model size |
+| Remote | Medium Security (ZKP/MPC of TLS, TTP assumed to serve the model honestly) | Closed-source and Open-Source Models | Fixed cost (e.g., GPT-4); model size does not affect computation cost      |
 
 ### Example Use Case
 
-Consider an AI system like ChatGPT starting to misbehave and generating harmful content to a small fraction of users, such as initiating conversations unprompted. Without the **AI Passport**, it would be difficult to confirm the issue, as both users and the AI provider could claim that the AI was not responsible, suggesting the user fabricated the conversation. Even when users share the conversation history, the AI provider can delete the conversation from their servers, making it impossible to verify authenticity. This allows the AI provider to deny the issue and continue operating without consequences.
+Consider an AI system like ChatGPT starting to misbehave and generating harmful content to a small fraction of users,
+such as initiating conversations unprompted. Without the **AI Passport**, it would be difficult to confirm the issue, as
+both users and the AI provider could claim that the AI was not responsible, suggesting the user fabricated the
+conversation. Even when users share the conversation history, the AI provider can delete the conversation from their
+servers, making it impossible to verify authenticity. This allows the AI provider to deny the issue and continue
+operating without consequences.
 
-A recent example is the situation where [GPT-4 initiated a conversation with a user](https://www.reddit.com/r/ChatGPT/comments/1fhhh6b/did_chatgpt_just_message_me_first/). Initially met with skepticism and considered staged, it was later confirmed by OpenAI—an acknowledgment that might not have occurred if OpenAI had chosen to disregard the information.
+A recent example is the situation
+where [GPT-4 initiated a conversation with a user](https://www.reddit.com/r/ChatGPT/comments/1fhhh6b/did_chatgpt_just_message_me_first/).
+Initially met with skepticism and considered staged, it was later confirmed by OpenAI—an acknowledgment that might not
+have occurred if OpenAI had chosen to disregard the information.
 
-With the **AI Passport**, a user who receives such a message could generate a cryptographic proof of the conversation and share it with the AI provider and the wider community or via a public AI security database. Anyone can then verify the proof and confirm that the content was indeed generated by the AI model and not fabricated. This shifts the discussion from questioning authenticity to addressing whether such behavior is acceptable from an AI assistant. It ensures that the AI provider is held accountable for harmful content and takes appropriate measures to address the issue. Additionally, it makes it easier to notice the emergence of adversarial behavior by AI agents and provides time to react, rather than [being unaware until it is too late](https://www.alignmentforum.org/posts/qYzqDtoQaZ3eDDyxa/distinguishing-ai-takeover-scenarios).
+With the **AI Passport**, a user who receives such a message could generate a cryptographic proof of the conversation
+and share it with the AI provider and the wider community or via a public AI security database. Anyone can then verify
+the proof and confirm that the content was indeed generated by the AI model and not fabricated. This shifts the
+discussion from questioning authenticity to addressing whether such behavior is acceptable from an AI assistant. It
+ensures that the AI provider is held accountable for harmful content and takes appropriate measures to address the
+issue. Additionally, it makes it easier to notice the emergence of adversarial behavior by AI agents and provides time
+to react, rather
+than [being unaware until it is too late](https://www.alignmentforum.org/posts/qYzqDtoQaZ3eDDyxa/distinguishing-ai-takeover-scenarios).
 
+![AI Passport Example](docs/ai_passport_example.png)
 ---
 
 ## Using AI Passport
-
 
 ### Prerequisites
 
@@ -80,10 +148,11 @@ Before running this demo, ensure you have the following installed:
 
 - **Rust**: Install Rust by following the instructions at [rust-lang.org](https://www.rust-lang.org/tools/install).
 - **Local Mode**:
-  - **Model in ONNX type**: Have an model in the ONNX file format ready (e.g., `network.onnx`).
-  - **Input Data**: Prepare input data in JSON format compatible with your model (e.g., `input.json`).
+    - **Model in ONNX type**: Have an model in the ONNX file format ready (e.g., `network.onnx`).
+    - **Input Data**: Prepare input data in JSON format compatible with your model (e.g., `input.json`).
 - **Remote Mode**:
-  - **API Access**: For remote operations, ensure you have access to the necessary APIs (e.g., Anthropic API) and have your API keys ready.
+    - **API Access**: For remote operations, ensure you have access to the necessary APIs (e.g., Anthropic API) and have
+      your API keys ready.
 
 ### Installation
 
@@ -121,7 +190,8 @@ The demo consists of several commands divided into local and remote operations:
 
 ## Local Mode
 
-Local mode involves you running a model locally. This is a more secure approach, yet it comes with higher computation costs. It involves generating a passport for your local model, attributing content to the model, and verifying the
+Local mode involves you running a model locally. This is a more secure approach, yet it comes with higher computation
+costs. It involves generating a passport for your local model, attributing content to the model, and verifying the
 attribution. These operations are performed locally on your machine.
 
 ![Local Operations](docs/decentralized_id_diagram.png)
@@ -264,7 +334,9 @@ generated files.
 
 With the remote mode, you can now interact with AI models hosted remotely (e.g., via APIs) and
 generate proofs of these interactions. The identity of the model is included in the proof, ensuring that the output is
-genuinely produced by the specified model. This mode is slightly less secure than the local mode as it trusts the model provider to behave correctly during the communication, however after the cnversation is finished, it no longer relies on the honesty of the model provider.
+genuinely produced by the specified model. This mode is slightly less secure than the local mode as it trusts the model
+provider to behave correctly during the communication, however after the cnversation is finished, it no longer relies on
+the honesty of the model provider.
 
 The remote mode leverage TLSNotary to generate cryptographic proofs of interactions with AI services. TLSNotary
 allows you to prove to third parties that specific communications with an AI service occurred, without revealing the
@@ -411,10 +483,18 @@ CF-RAY: XXXXXXXXXXXXXXXXXXXX
 
 ## Future Work
 
-- **Contributions to AI Governance**: We plan to collaborate with the broader AI safety and governance communities to refine our protocols and promote the widespread adoption of **AI Passport**. By doing so, we aim to enhance accountability and trust in AI systems, contributing to more robust AI safety frameworks and regulatory compliance.
-- **Support for Additional Remote Models**: Our roadmap includes expanding **AI Passport** to integrate with more AI services and APIs. This will enable compatibility with a wider range of models, including those hosted on remote servers, broadening the system's applicability across diverse AI environments.
-- **Enhanced Metadata Input**: Future iterations will include features that allow users to input model metadata via command-line options or through interactive prompts. This will improve flexibility and provide greater control over how model information is tracked and verified.
-- **Tracking Model Incidents**: We plan to develop a comprehensive website where users can submit, verify, and track incidents related to AI models. This platform will offer a holistic view of the AI security landscape, serving as a centralized resource for AI safety practitioners to monitor risks and respond to emerging threats in real time.
+- **Contributions to AI Governance**: We plan to collaborate with the broader AI safety and governance communities to
+  refine our protocols and promote the widespread adoption of **AI Passport**. By doing so, we aim to enhance
+  accountability and trust in AI systems, contributing to more robust AI safety frameworks and regulatory compliance.
+- **Support for Additional Remote Models**: Our roadmap includes expanding **AI Passport** to integrate with more AI
+  services and APIs. This will enable compatibility with a wider range of models, including those hosted on remote
+  servers, broadening the system's applicability across diverse AI environments.
+- **Enhanced Metadata Input**: Future iterations will include features that allow users to input model metadata via
+  command-line options or through interactive prompts. This will improve flexibility and provide greater control over
+  how model information is tracked and verified.
+- **Tracking Model Incidents**: We plan to develop a comprehensive website where users can submit, verify, and track
+  incidents related to AI models. This platform will offer a holistic view of the AI security landscape, serving as a
+  centralized resource for AI safety practitioners to monitor risks and respond to emerging threats in real time.
 - **Additional Features**:
     - Support for different proof systems.
     - Integration with model repositories for automatic passport generation.
