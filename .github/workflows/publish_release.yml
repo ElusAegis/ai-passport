@@ -110,12 +110,12 @@ jobs:
 
     - name: Read upload_url from file
       id: read_upload_url
-      run: upload_url=$(cat upload_url.txt) && echo "::set-output name=upload_url::$upload_url"
+      run: echo "UPLOAD_URL=$(cat upload_url.txt)" >> $GITHUB_ENV
 
     - name: Upload Executable Binaries
       uses: actions/upload-release-asset@v1
       with:
-        upload_url: ${{ steps.read_upload_url.outputs.upload_url }}
+        upload_url: ${{ env.UPLOAD_URL }}
         asset_path: ./passport-for-ai
         asset_name: passport-for-ai-${{ matrix.target }}
         asset_content_type: application/octet-stream
