@@ -24,31 +24,25 @@ jobs:
     - name: Checkout repository
       uses: actions/checkout@v2
 
-#    - name: Install Rust
-#      uses: actions-rs/toolchain@v1
-#      with:
-#        toolchain: stable
-#
-#    - name: Install cross for aarch64
-#      if: matrix.target == 'aarch64-unknown-linux-gnu'
-#      run: cargo install cross
-#
-#    - name: Install target
-#      run: rustup target add ${{ matrix.target }}
-#
-#    - name: Build for ${{ matrix.target }}
-#      run: |
-#        if [[ "${{ matrix.target }}" == "aarch64-unknown-linux-gnu" ]]; then
-#          cross build --release --target ${{ matrix.target }};
-#        else
-#          cargo build --release --target ${{ matrix.target }};
-#        fi
+    - name: Install Rust
+      uses: actions-rs/toolchain@v1
+      with:
+        toolchain: stable
 
-    - name: Create a dummy file directory
-      run: mkdir -p ./target/${{ matrix.target }}/release
+    - name: Install cross for aarch64
+      if: matrix.target == 'aarch64-unknown-linux-gnu'
+      run: cargo install cross
 
-    - name: Create a dummy file for the build artifact
-      run: echo "This is a dummy file" > ./target/${{ matrix.target }}/release/passport-for-ai
+    - name: Install target
+      run: rustup target add ${{ matrix.target }}
+
+    - name: Build for ${{ matrix.target }}
+      run: |
+        if [[ "${{ matrix.target }}" == "aarch64-unknown-linux-gnu" ]]; then
+          cross build --release --target ${{ matrix.target }};
+        else
+          cargo build --release --target ${{ matrix.target }};
+        fi
 
     - name: Upload build artifacts
       uses: actions/upload-artifact@v3
