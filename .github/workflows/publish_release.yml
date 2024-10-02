@@ -112,17 +112,11 @@ jobs:
       id: read_upload_url
       run: upload_url=$(cat upload_url.txt) && echo "::set-output name=upload_url::$upload_url"
 
-    - name: Print upload_url
-      run: echo ${{ steps.read_upload_url.outputs.upload_url }}
-
-    - name: Print upload_url.txt
-      run: cat upload_url.txt
-
     - name: Upload Executable Binaries
       uses: actions/upload-release-asset@v1
       with:
         upload_url: ${{ steps.read_upload_url.outputs.upload_url }}
-        asset_path: ./target/${{ matrix.target }}/release/passport-for-ai
+        asset_path: ./passport-for-ai
         asset_name: passport-for-ai-${{ matrix.target }}
         asset_content_type: application/octet-stream
       env:
