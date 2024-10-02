@@ -25,7 +25,7 @@ models and assess each models AI Security Risks, while also providing a proof th
 originated from the stated models. This will allow key decision makers can make clear judgment, and it would not be
 possible to cilence them, as well as discard the dangerous model behaviour as one of situation.
 
-<img src="docs/ai_harm_reporting.png" alt="AI Harm Database" width="80%"/>
+![AI Harm Database](docs/ai_harm_reporting.png)
 
 
 > **Note**: This is an experimental project and should be used with caution. It is not intended for production use
