@@ -44,6 +44,9 @@ jobs:
 #          cargo build --release --target ${{ matrix.target }};
 #        fi
 
+    - name: Create a dummy file directory
+      run: mkdir -p ./target/${{ matrix.target }}/release
+
     - name: Create a dummy file for the build artifact
       run: echo "This is a dummy file" > ./target/${{ matrix.target }}/release/passport-for-ai
 
