@@ -7,6 +7,9 @@ use {passport_for_ai::local, std::path::Path};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
+    // Initialize the logger
+    tracing_subscriber::fmt::init();
+
     let matches = Command::new("ai-passport")
         .version("0.1")
         .about("AI Passport CLI")

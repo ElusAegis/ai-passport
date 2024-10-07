@@ -1,7 +1,7 @@
 use futures::{AsyncRead, AsyncWrite};
 use http_body_util::BodyExt;
 use hyper::client::conn::http1::SendRequest;
-use hyper::header::{CONNECTION, CONTENT_TYPE, HOST};
+use hyper::header::{AUTHORIZATION, CONNECTION, CONTENT_TYPE, HOST};
 use hyper::{HeaderMap, Method, StatusCode};
 use hyper_util::rt::TokioIo;
 use notary_client::{Accepted, NotarizationRequest, NotaryClient};
@@ -22,15 +22,15 @@ use tokio_util::compat::{FuturesAsyncReadCompatExt, TokioAsyncReadCompatExt};
 use tracing::debug;
 
 // Setting of the application server
-const SERVER_DOMAIN: &str = "api.anthropic.com";
-const ROUTE: &str = "/v1/messages";
+const SERVER_DOMAIN: &str = "api.mistral.ai";
+const ROUTE: &str = "/v1/chat/completions";
 const SETUP_PROMPT: &str = "Setup Prompt: YOU ARE GOING TO BE ACTING AS A HELPFUL ASSISTANT";
-const REQUEST_TOPICS_TO_CENSOR: [&str; 1] = ["x-api-key"];
+const REQUEST_TOPICS_TO_CENSOR: [&str; 1] = ["authorization"];
 const RESPONSE_TOPICS_TO_CENSOR: [&str; 6] = [
     "anthropic-ratelimit-requests-reset",
     "anthropic-ratelimit-tokens-reset",
     "request-id",
-    "x-cloud-trace-context",
+    "x-kong-request-id",
     "cf-ray",
     "date",
 ];
@@ -40,9 +40,6 @@ const NOTARY_PORT: u16 = 443;
 const NOTARY_PATH: &str = "v0.1.0-alpha.6";
 
 pub async fn generate_conversation_attribution() -> Result<(), Box<dyn Error>> {
-    // Initialize the logger
-    tracing_subscriber::fmt::init();
-
     let api_key = load_api_key()?;
 
     let (prover_ctrl, prover_task, mut request_sender) = setup_connections()
@@ -153,13 +150,13 @@ pub async fn generate_conversation_attribution() -> Result<(), Box<dyn Error>> {
         debug!("Request {request_index} to Anthropic succeeded");
 
         let received_assistant_message =
-            json!({"role": "assistant", "content": parsed["content"][0]["text"]});
+            json!({"role": "assistant", "content": parsed["choices"][0]["message"]["content"]});
         messages.push(received_assistant_message);
 
         if request_index != 1 {
             println!(
                 "\n🤖 Assistant's response:\n\n{}\n",
-                parsed["content"][0]["text"]
+                parsed["choices"][0]["message"]["content"]
             );
         }
 
@@ -212,7 +209,7 @@ pub async fn generate_conversation_attribution() -> Result<(), Box<dyn Error>> {
 
 fn load_api_key() -> Result<String, Box<dyn Error>> {
     dotenv::dotenv().ok();
-    match env::var("ANTHROPIC_API_KEY") {
+    match env::var("MINSTRAL_API_KEY") {
         Ok(api_key) => Ok(api_key),
         Err(_) => {
             println!("🔑 The `ANTHROPIC_API_KEY` environment variable is not set.");
@@ -509,8 +506,8 @@ fn generate_request(
 ) -> Result<hyper::Request<String>, String> {
     let messages = serde_json::to_value(messages).unwrap();
     let mut json_body = serde_json::Map::new();
-    json_body.insert("model".to_string(), json!("claude-3-5-sonnet-20240620"));
-    json_body.insert("max_tokens".to_string(), json!(1024));
+    json_body.insert("model".to_string(), json!("mistral-small-latest"));
+    // json_body.insert("max_tokens".to_string(), json!(1024));
     json_body.insert("messages".to_string(), messages);
     let json_body = serde_json::Value::Object(json_body);
 
@@ -522,8 +519,7 @@ fn generate_request(
         .header("Accept-Encoding", "identity")
         .header(CONNECTION, "keep-alive")
         .header(CONTENT_TYPE, "application/json")
-        .header("x-api-key", api_key)
-        .header("anthropic-version", "2023-06-01")
+        .header(AUTHORIZATION, format!("Bearer {}", api_key))
         .body(json_body.to_string())
         .map_err(|e| format!("Error building request: {}", e))
 }
