@@ -78,10 +78,10 @@ jobs:
     - name: Change permissions for the binary
       run: chmod +x passport-for-ai
 
-    - name: Run remote `anthropic-conversation`
+    - name: Run remote `attributed-conversation`
       run: echo "1\nHello ChatGPT!\nexit\n" | ./passport-for-ai remote attributed-conversation
       env:
-        REDPILL_API_KEY: ${{ secrets.RED_PILL_API_KEY }}
+        REDPILL_API_KEY: ${{ secrets.REDPILL_API_KEY }}
 
     - name: Find generated proof file
       id: find_proof
