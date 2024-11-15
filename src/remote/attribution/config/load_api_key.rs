@@ -2,7 +2,7 @@ use anyhow::{Context, Result};
 use std::env;
 use std::io::Write;
 
-const API_KEY_ENV_VAR: &str = "REDPIL_API_KEY";
+const API_KEY_ENV_VAR: &str = "REDPILL_API_KEY";
 
 pub(crate) fn load_api_key() -> Result<String> {
     dotenv::dotenv().ok();

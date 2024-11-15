@@ -81,7 +81,7 @@ jobs:
     - name: Run remote `anthropic-conversation`
       run: echo "1\nHello ChatGPT!\nexit\n" | ./passport-for-ai remote attributed-conversation
       env:
-        ANTHROPIC_API_KEY: ${{ secrets.RED_PILL_API_KEY }}
+        REDPILL_API_KEY: ${{ secrets.RED_PILL_API_KEY }}
 
     - name: Find generated proof file
       id: find_proof
