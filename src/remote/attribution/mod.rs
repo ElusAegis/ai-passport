@@ -117,10 +117,10 @@ pub async fn generate_conversation_attribution() -> Result<()> {
 async fn single_interaction_round(
     request_sender: &mut SendRequest<String>,
     config: &Config,
-    mut messages: &mut Vec<serde_json::Value>,
+    messages: &mut Vec<serde_json::Value>,
     request_index: i32,
-    mut recv_private_data: &mut Vec<Vec<u8>>,
-    mut sent_private_data: &mut Vec<Vec<u8>>,
+    recv_private_data: &mut Vec<Vec<u8>>,
+    sent_private_data: &mut Vec<Vec<u8>>,
 ) -> Result<bool> {
     let mut user_message = String::new();
     // The first request is the setup prompt
@@ -159,12 +159,12 @@ async fn single_interaction_round(
     messages.push(user_message);
 
     // Prepare the Request to send to the model's API
-    let request = generate_request(&mut messages, &config.model_settings)
+    let request = generate_request(messages, &config.model_settings)
         .context(format!("Error generating #{request_index} request"))?;
 
     // Collect the private data transmitted in the request
     extract_private_data(
-        &mut sent_private_data,
+        sent_private_data,
         request.headers(),
         config.privacy_settings.request_topics_to_censor,
     );
@@ -192,7 +192,7 @@ async fn single_interaction_round(
 
     // Collect the received private data
     extract_private_data(
-        &mut recv_private_data,
+        recv_private_data,
         response.headers(),
         config.privacy_settings.response_topics_to_censor,
     );

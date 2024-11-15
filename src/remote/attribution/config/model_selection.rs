@@ -16,7 +16,7 @@ pub(crate) async fn select_model_id(api_settings: &ModelApiSettings) -> Result<S
         println!("1️⃣ OpenAI gpt-4o (default)");
         println!("2️⃣ Claude-3.5-Sonnet");
         println!("3️⃣ Mistral-8b");
-        println!("💡 Or provide a custom model ID.\n\tPlease visit `https://red-pill.ai/model-list` to view available model IDs.");
+        println!("💡 Or provide a custom model ID. Please visit `https://red-pill.ai/model-list` to view available model IDs.");
         print!("👉 Your choice: ");
         std::io::stdout()
             .flush()
@@ -32,7 +32,7 @@ pub(crate) async fn select_model_id(api_settings: &ModelApiSettings) -> Result<S
                     custom_model.to_string()
                 } else {
                     println!("❌ Invalid model ID. Please enter a valid model ID from the list or provide a custom model ID.");
-                    return Err(anyhow::anyhow!("Invalid model ID"));
+                    continue;
                 }
             }
         };
