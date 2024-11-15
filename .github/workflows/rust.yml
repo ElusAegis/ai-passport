@@ -79,7 +79,8 @@ jobs:
       run: chmod +x passport-for-ai
 
     - name: Run remote `attributed-conversation`
-      run: echo "1\nHello ChatGPT\nexit\n" | ./passport-for-ai remote attributed-conversation
+      shell: bash
+      run: printf "1\nHello ChatGPT\nexit\n" | ./passport-for-ai remote attributed-conversation
       env:
         REDPILL_API_KEY: ${{ secrets.REDPILL_API_KEY }}
 
