@@ -75,8 +75,8 @@ async fn main() -> Result<(), Box<dyn Error>> {
             Command::new("remote")
                 .about("Operations for remote models")
                 .subcommand(
-                    Command::new("anthropic-conversation")
-                        .about("Interact with the Anthropic API to generate an attribution proof of conversation"),
+                    Command::new("attributed-conversation")
+                        .about("Interact with any model API to generate an attribution proof of conversation"),
                 )
                 .subcommand(
                     Command::new("verify-attribution")
@@ -142,7 +142,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
         #[cfg(feature = "remote")]
         {
             if remote_matches
-                .subcommand_matches("anthropic-conversation")
+                .subcommand_matches("attributed-conversation")
                 .is_some()
             {
                 remote::generate_conversation_attribution()

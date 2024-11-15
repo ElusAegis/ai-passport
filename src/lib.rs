@@ -1,3 +1,5 @@
+extern crate core;
+
 #[cfg(feature = "local")]
 pub mod local;
 #[cfg(feature = "remote")]

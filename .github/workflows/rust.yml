@@ -79,9 +79,17 @@ jobs:
       run: chmod +x passport-for-ai
 
     - name: Run remote `anthropic-conversation`
-      run: echo "Hello Claud\nexit\n" | ./passport-for-ai remote anthropic-conversation
+      run: echo "1\nHello ChatGPT!\nexit\n" | ./passport-for-ai remote attributed-conversation
       env:
-        ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        ANTHROPIC_API_KEY: ${{ secrets.RED_PILL_API_KEY }}
+
+    - name: Find generated proof file
+      id: find_proof
+      run: |
+        # Find the generated proof file with model type and timestamp
+        PROOF_FILE=$(find . -name '*_conversation_proof.json' -type f | head -n 1)
+        echo "proof_file=$PROOF_FILE" >> $GITHUB_ENV
+        echo "Found proof file: $PROOF_FILE"
 
     - name: Run remote `verify-attribution`
-      run: ./passport-for-ai remote verify-attribution claud_conversation_proof.json
+      run: ./passport-for-ai remote verify-attribution "$proof_file"

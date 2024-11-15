@@ -151,7 +151,8 @@ Before running this demo, ensure you have the following installed:
     - **Model in ONNX type**: Have an model in the ONNX file format ready (e.g., `network.onnx`).
     - **Input Data**: Prepare input data in JSON format compatible with your model (e.g., `input.json`).
 - **Remote Mode**:
-    - **API Access**: For remote operations, ensure you have access to the necessary APIs (e.g., Anthropic API) and have
+    - **API Access**: For remote operations, ensure you have access to the necessary APIs (e.g., Red Pill API Key) and
+      have
       your API keys ready.
 
 ### Installation
@@ -344,21 +345,22 @@ content of the communication.
 
 ![Remote Operations](docs/centralized_id_diagram.png)
 
-### Step 1: Interact with Anthropic's API and Generate an Attribution Proof
+### Step 1: Interact with GPT-4o's API and Generate an Attribution Proof
 
-Engage in a conversation with an AI assistant (e.g., Anthropic's Claude) and generate a cryptographic proof of the
+Engage in a conversation with an AI assistant (e.g., OpenAI's GPT-4o) and generate a cryptographic proof of the
 conversation.
 
 **Command**:
 
 ```bash
-cargo run --release -- remote anthropic-conversation
+cargo run --release -- remote attributed-conversation
 ```
 
 **Explanation**:
 
 - `remote`: Specifies that the operation is for a remote model or service.
-- `anthropic-conversation`: Initiates a conversation with Anthropic's AI assistant and generates a proof of the
+- `attributed-conversation`: Initiates a conversation with any AI assistant supported by Red Pill and generate a proof
+  of the
   interaction.
 
 **What It Does**:
@@ -367,29 +369,37 @@ cargo run --release -- remote anthropic-conversation
   receive responses.
 - **Generates a Cryptographic Proof**: After the conversation, the application generates a proof that the conversation
   occurred as recorded.
-- **Saves the Proof**: The proof is saved to a file named `claude_conversation_proof.json`.
+- **Saves the Proof**: The proof is saved to a file named `{selected_model}_{timestamp}_conversation_proof.json`.
 
 **Sample Output**:
 
 ```
-🌟 Welcome to the Anthropic Prover CLI! 🌟
-This application will interact with the Anthropic API to generate a cryptographic proof of your conversation.
-💬 First, you will engage in a conversation with the assistant.
-The assistant will respond to your messages in real time.
-📝 When you're done, simply type 'exit' or press Enter without typing a message to end the conversation.
-🔒 Once finished, a proof of the conversation will be generated.
-💾 The proof will be saved as 'claude_conversation_proof.json' for your records.
-✨ Let's get started! Begin by sending your first message.
+🌟 Welcome to the Multi-Model Prover CLI! 🌟
+This application allows you to interact with various AI models and then generate a cryptographic proof of your conversation.
+⚙️ First, you will need to set up your assistant model.
+🤖 Please select a model to interact with:
+1️⃣ OpenAI gpt-4o (default)
+2️⃣ Claude-3.5-Sonnet
+3️⃣ Mistral-8b
+💡 Or type 'other' to provide a custom model ID.
+```
 
-💬 Your message:
+```
+👉 Your choice: 3
+```
+
+```
+🔐 Next, please wait while the system is setup...
+
+💬 Your message (type 'exit' to end): 
 > Hello, assistant!
 ```
 
 After the conversation:
 
 ```
-🔒 Generating a cryptographic proof of the conversation. Please wait...
-✅ Proof successfully saved to `claude_conversation_proof.json`.
+✅ Proof successfully saved to `mistralai_ministral-8b_1731664270_conversation_proof.json`.
+
 🔍 You can share this proof or inspect it at: https://explorer.tlsnotary.org/.
 📂 Simply upload the proof, and anyone can verify its authenticity and inspect the details.
 ```
@@ -403,7 +413,7 @@ or locally through the command-line interface.
 
 To verify the proof using the TLSNotary website, follow these steps:
 
-1. After generating the proof (e.g., `claude_conversation_proof.json`), navigate to
+1. After generating the proof (e.g., `mistralai_ministral-8b_1731664270_conversation_proof.json`), navigate to
    the [TLSNotary Explorer](https://explorer.tlsnotary.org/).
 2. Upload the JSON proof file to the site.
 3. The website will analyze the proof and provide confirmation that the conversation occurred exactly as recorded,
@@ -418,14 +428,14 @@ To verify the proof locally, use the following command:
 **Command**:
 
 ```bash
-cargo run --release -- remote verify-attribution claud_conversation_proof.json
+cargo run --release -- remote verify-attribution mistralai_ministral-8b_1731664270_conversation_proof.json
 ```
 
 **Explanation**:
 
 - `remote`: Specifies that the operation is for a remote model or service.
 - `verify-attribution`: The command to verify the attribution proof.
-- `claude_conversation_proof.json`: The path to the proof file generated in Step 1.
+- `mistralai_ministral-8b_1731664270_conversation_proof.json`: The path to the proof file generated in Step 1.
 
 **What It Does**:
 
@@ -437,44 +447,79 @@ cargo run --release -- remote verify-attribution claud_conversation_proof.json
 **Sample Output**:
 
 ```
-Successfully verified that the bytes below came from a session with Dns("api.anthropic.com") at 2024-10-01 10:25:49 UTC.
+Successfully verified that the bytes below came from a session with Dns("api.red-pill.ai") at 2024-11-15 10:31:57 UTC.
 Note that the bytes which the Prover chose not to disclose are shown as X.
 
 Messages sent:
 
-POST /v1/messages HTTP/1.1
-host: api.anthropic.com
+POST /v1/chat/completions HTTP/1.1
+host: api.red-pill.ai
 accept-encoding: identity
 connection: keep-alive
 content-type: application/json
-x-api-key: XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
-anthropic-version: 2023-06-01
-content-length: 161
+authorization: XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
+content-length: 144
 
-{"max_tokens":1024,"messages":[{"content":"Setup Prompt: YOU ARE GOING TO BE ACTING AS A HELPFUL ASSISTANT","role":"user"}],"model":"claude-3-5-sonnet-20240620"}
+{"messages":[{"content":"Model Prompt: YOU ARE GOING TO BE ACTING AS A HELPFUL ASSISTANT","role":"user"}],"model":"anthropic/claude-3-5-sonnet"}POST /v1/chat/completions HTTP/1.1
+host: api.red-pill.ai
+accept-encoding: identity
+connection: keep-alive
+content-type: application/json
+authorization: XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
+content-length: 434
+
+{"messages":[{"content":"Model Prompt: YOU ARE GOING TO BE ACTING AS A HELPFUL ASSISTANT","role":"user"},{"content":"I'm ready to assist you as a helpful AI assistant. I aim to provide clear, accurate, and useful information while being direct and straightforward in my responses. How can I help you today?","role":"assistant"},{"content":"Hello, who are you? Who is your owner?","role":"user"}],"model":"anthropic/claude-3-5-sonnet"}GET /v1/chat/completions HTTP/1.1
+host: api.red-pill.ai
+accept-encoding: identity
+connection: close
+
+
 
 Messages received:
 
 HTTP/1.1 200 OK
-Date: XXXXXXXXXXXXXXXXXXXXXXXXXXXXX
-Content-Type: application/json
-Content-Length: 451
+Date: Fri, 15 Nov 2024 10:32:01 GMT
+Content-Type: application/json; charset=UTF-8
+Content-Length: 425
 Connection: keep-alive
-anthropic-ratelimit-requests-limit: 50
-anthropic-ratelimit-requests-remaining: 49
-anthropic-ratelimit-requests-reset: XXXXXXXXXXXXXXXXXXXX
-anthropic-ratelimit-tokens-limit: 40000
-anthropic-ratelimit-tokens-remaining: 40000
-anthropic-ratelimit-tokens-reset: XXXXXXXXXXXXXXXXXXXX
-request-id: XXXXXXXXXXXXXXXXXXXXXXXXXXXX
-x-cloud-trace-context: XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
-via: 1.1 google
-CF-Cache-Status: DYNAMIC
-X-Robots-Tag: none
+access-control-allow-origin: *
+alt-svc: h3=":443"; ma=86400
+cf-cache-status: DYNAMIC
+Report-To: XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
+NEL: {"success_fraction":0,"report_to":"cf-nel","max_age":604800}
 Server: cloudflare
 CF-RAY: XXXXXXXXXXXXXXXXXXXX
+server-timing: XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
 
-{"id":"msg_013u9zLkoym1AVARYQ8GhDWF","type":"message","role":"assistant","model":"claude-3-5-sonnet-20240620","content":[{"type":"text","text":"Certainly! I'm here to assist you with any questions, tasks, or information you need. As a helpful assistant, I'll do my best to provide accurate, useful, and friendly responses. What can I help you with today?"}],"stop_reason":"end_turn","stop_sequence":null,"usage":{"input_tokens":25,"output_tokens":51}}
+{"usage":{"prompt_tokens":25,"completion_tokens":43,"total_tokens":68},"model":"claude-3-5-sonnet-20241022","created":1731666721,"choices":[{"index":0,"message":{"role":"assistant","content":"I'm ready to assist you as a helpful AI assistant. I aim to provide clear, accurate, and useful information while being direct and straightforward in my responses. How can I help you today?"},"logprobs":null,"finish_reason":"stop"}]}HTTP/1.1 200 OK
+Date: Fri, 15 Nov 2024 10:32:11 GMT
+Content-Type: application/json; charset=UTF-8
+Content-Length: 452
+Connection: keep-alive
+access-control-allow-origin: *
+alt-svc: h3=":443"; ma=86400
+cf-cache-status: DYNAMIC
+Report-To: XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
+NEL: {"success_fraction":0,"report_to":"cf-nel","max_age":604800}
+Server: cloudflare
+CF-RAY: XXXXXXXXXXXXXXXXXXXX
+server-timing: XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
+
+{"usage":{"prompt_tokens":82,"completion_tokens":60,"total_tokens":142},"model":"claude-3-5-sonnet-20241022","created":1731666731,"choices":[{"index":0,"message":{"role":"assistant","content":"I am Claude, an AI assistant created by Anthropic. I aim to be direct and honest about who and what I am. While I'm designed to be helpful, I want to be clear that I'm an AI, not a human. How can I assist you today?"},"logprobs":null,"finish_reason":"stop"}]}HTTP/1.1 404 Not Found
+Date: Fri, 15 Nov 2024 10:32:18 GMT
+Content-Type: text/plain; charset=UTF-8
+Content-Length: 13
+Connection: close
+access-control-allow-origin: *
+alt-svc: h3=":443"; ma=86400
+cf-cache-status: DYNAMIC
+Report-To: XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
+NEL: {"success_fraction":0,"report_to":"cf-nel","max_age":604800}
+Server: cloudflare
+CF-RAY: XXXXXXXXXXXXXXXXXXXX
+server-timing: XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
+
+404 Not Found
 ```
 
 ---
