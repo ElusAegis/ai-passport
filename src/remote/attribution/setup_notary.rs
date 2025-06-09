@@ -3,18 +3,24 @@ use anyhow::{Context, Result};
 use futures::{AsyncRead, AsyncWrite};
 use hyper::client::conn::http1::SendRequest;
 use hyper_util::rt::TokioIo;
+use k256::{pkcs8::DecodePrivateKey, SecretKey};
 use notary_client::{Accepted, NotarizationRequest, NotaryClient};
-use p256::pkcs8::DecodePrivateKey;
-
-use std::str;
-use tlsn_core::SessionHeader;
-use tlsn_prover::tls::state::Closed;
-use tlsn_prover::tls::{Prover, ProverConfig, ProverControl, ProverError};
-use tlsn_verifier::tls::{Verifier, VerifierConfig};
+use tlsn_common::config::{ProtocolConfig, ProtocolConfigValidator};
+use tlsn_core::attestation::AttestationConfig;
+use tlsn_core::signing::SignatureAlgId;
+use tlsn_core::CryptoProvider;
+use tlsn_prover::state::Closed;
+use tlsn_prover::{Prover, ProverConfig, ProverControl, ProverError};
+use tlsn_verifier::{Verifier, VerifierConfig};
 use tokio::task::JoinHandle;
 use tokio_util::compat::FuturesAsyncReadCompatExt;
 use tokio_util::compat::TokioAsyncReadCompatExt;
-use tracing::{debug, warn};
+use tracing::debug;
+
+// Maximum number of bytes that can be sent from prover to server
+const MAX_SENT_DATA: usize = 1 << 12;
+// Maximum number of bytes that can be received by prover from server
+const MAX_RECV_DATA: usize = 1 << 14;
 
 pub(super) async fn setup_connections(
     config: &Config,
@@ -28,18 +34,22 @@ pub(super) async fn setup_connections(
         println!("🚨 WARNING: Authenticating output with a local dummy notary, which is not secure and should not be used in production.");
         let (prover_socket, notary_socket) = tokio::io::duplex(1 << 16);
 
-        let connection_id = format!("{}_conversation", config.model_settings.id);
-
         // Start a local simple notary service
-        tokio::spawn(run_dummy_notary(
-            notary_socket.compat(),
-            connection_id.clone(),
-        ));
+        tokio::spawn(run_notary(notary_socket.compat()));
 
         // A Prover configuration
         let prover_config = ProverConfig::builder()
-            .id(&connection_id)
-            .server_dns(config.model_settings.api_settings.server_domain)
+            .server_name(config.model_settings.api_settings.server_domain)
+            .protocol_config(
+                ProtocolConfig::builder()
+                    // We must configure the amount of data we expect to exchange beforehand, which will
+                    // be preprocessed prior to the connection. Reducing these limits will improve
+                    // performance.
+                    .max_sent_data(1024)
+                    .max_recv_data(4096)
+                    .build()
+                    .context("Error building protocol configuration")?,
+            )
             .build()
             .context("Error building prover configuration")?;
 
@@ -54,7 +64,6 @@ pub(super) async fn setup_connections(
         let notary_client = NotaryClient::builder()
             .host(config.notary_settings.host)
             .port(config.notary_settings.port)
-            .path(config.notary_settings.path)
             .enable_tls(true)
             .build()
             .context("Error building notary client")?;
@@ -66,17 +75,24 @@ pub(super) async fn setup_connections(
 
         let Accepted {
             io: notary_connection,
-            id: session_id,
+            id: _,
             ..
         } = notary_client
             .request_notarization(notarization_request)
             .await
             .context("Error requesting notarization")?;
 
+        // Set up protocol configuration for prover.
+        let protocol_config = ProtocolConfig::builder()
+            .max_sent_data(MAX_SENT_DATA)
+            .max_recv_data(MAX_RECV_DATA)
+            .build()
+            .context("Error building protocol configuration")?;
+
         // Configure a new prover with the unique session id returned from notary client.
         let prover_config = ProverConfig::builder()
-            .id(session_id)
-            .server_dns(config.model_settings.api_settings.server_domain)
+            .server_name(config.model_settings.api_settings.server_domain)
+            .protocol_config(protocol_config)
             .build()
             .context("Error building prover configuration")?;
 
@@ -101,52 +117,60 @@ pub(super) async fn setup_connections(
         .context("Error connecting Prover to server")?;
     let tls_connection = TokioIo::new(tls_connection.compat());
 
-    warn!("Test");
     // Grab a control handle to the Prover
     let prover_ctrl = prover_fut.control();
 
-    warn!("Test 1");
-
     // Spawn the Prover to be run concurrently
     let prover_task = tokio::spawn(prover_fut);
-
-    warn!("Test 2");
 
     // Attach the hyper HTTP client to the TLS connection
     let (request_sender, connection) = hyper::client::conn::http1::handshake(tls_connection)
         .await
         .context("Error establishing HTTP connection")?;
 
-    warn!("Test 4");
-
     // Spawn the HTTP task to be run concurrently
     tokio::spawn(connection);
-
-    warn!("Test 3");
 
     Ok((prover_ctrl, prover_task, request_sender))
 }
 
 /// Runs a simple Notary with the provided connection to the Prover.
-pub async fn run_dummy_notary<T: AsyncWrite + AsyncRead + Send + Unpin + 'static>(
-    conn: T,
-    connection_id: String,
-) -> Result<SessionHeader> {
+pub async fn run_notary<T: AsyncWrite + AsyncRead + Send + Unpin + 'static>(conn: T) -> Result<()> {
     // Load the notary signing key
-    let signing_key_str = str::from_utf8(include_bytes!("../../../tlsn/notary.key"))
-        .context("Failed to read Notary key")?;
-    let signing_key = p256::ecdsa::SigningKey::from_pkcs8_pem(signing_key_str)
-        .context("Failed to parse Notary key")?;
+    let signing_key_str = include_str!("../../../tlsn/notary.key");
+    let signing_key = SecretKey::from_pkcs8_pem(signing_key_str)
+        .context("Failed to parse Notary key")?
+        .to_bytes();
 
-    // Setup default config. Normally a different ID would be generated
+    let mut provider = CryptoProvider::default();
+    provider
+        .signer
+        .set_secp256k1(&signing_key)
+        .context("Failed to set Notary key")?;
+
+    // Setup the config. Normally a different ID would be generated
     // for each notarization.
+    let config_validator = ProtocolConfigValidator::builder()
+        .max_sent_data(MAX_SENT_DATA)
+        .max_recv_data(MAX_RECV_DATA)
+        .build()
+        .context("Failed to build protocol config validator")?;
+
     let config = VerifierConfig::builder()
-        .id(connection_id)
+        .protocol_config_validator(config_validator)
+        .crypto_provider(provider)
         .build()
         .context("Failed to build verifier config")?;
 
+    let attestation_config = AttestationConfig::builder()
+        .supported_signature_algs(vec![SignatureAlgId::SECP256K1])
+        .build()
+        .context("Failed to build attestation config")?;
+
     Verifier::new(config)
-        .notarize::<_, p256::ecdsa::Signature>(conn, &signing_key)
+        .notarize(conn, &attestation_config)
         .await
-        .context("Error running dummy notary")
+        .context("Failed to notarize")?;
+
+    Ok(())
 }

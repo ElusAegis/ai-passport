@@ -42,7 +42,7 @@ impl Default for NotarySettings {
         NotarySettings {
             host: "notary.pse.dev",
             port: 443,
-            path: "v0.1.0-alpha.6",
+            path: "nightly",
         }
     }
 }

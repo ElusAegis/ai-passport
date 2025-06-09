@@ -1,19 +1,21 @@
-use anyhow::Context;
+use anyhow::{Context, Error};
 use hyper::HeaderMap;
 use std::ops::Range;
-use tlsn_core::commitment::CommitmentId;
-use tlsn_core::proof::TlsProof;
-use tlsn_core::NotarizedSession;
-use tlsn_prover::tls::state::Closed;
-use tlsn_prover::tls::{Prover, ProverError};
+use tlsn_core::attestation::Attestation;
+use tlsn_core::request::RequestConfig;
+use tlsn_core::transcript::TranscriptCommitConfig;
+use tlsn_core::Secrets;
+use tlsn_prover::state::Closed;
+use tlsn_prover::{Prover, ProverError};
 use tokio::task::JoinHandle;
 use tracing::debug;
+use utils::range::RangeSet;
 
 pub(super) async fn notarise_session(
     prover_task: JoinHandle<anyhow::Result<Prover<Closed>, ProverError>>,
     recv_private_data: &[Vec<u8>],
     sent_private_data: &[Vec<u8>],
-) -> anyhow::Result<(Vec<CommitmentId>, Vec<CommitmentId>, NotarizedSession)> {
+) -> Result<(Attestation, Secrets), Error> {
     // The Prover task should be done now, so we can grab it.
     let prover = prover_task
         .await
@@ -24,7 +26,7 @@ pub(super) async fn notarise_session(
 
     // Notarize the session
     let (public_sent_commitment_ids, _) = find_ranges(
-        prover.sent_transcript().data(),
+        prover.transcript().sent(),
         &sent_private_data
             .iter()
             .map(|v| v.as_slice())
@@ -32,64 +34,40 @@ pub(super) async fn notarise_session(
     );
 
     let (public_received_commitment_ids, _) = find_ranges(
-        prover.recv_transcript().data(),
+        prover.transcript().received(),
         &recv_private_data
             .iter()
             .map(|v| v.as_slice())
             .collect::<Vec<&[u8]>>(),
     );
 
-    let builder = prover.commitment_builder();
+    let mut builder = TranscriptCommitConfig::builder(prover.transcript());
 
-    let sent_commitment_ids = public_sent_commitment_ids
-        .iter()
-        .map(|range| builder.commit_sent(range).unwrap())
-        .collect::<Vec<_>>();
-
-    let recived_commitment_ids = public_received_commitment_ids
-        .iter()
-        .map(|range| builder.commit_recv(range).unwrap())
-        .collect::<Vec<_>>();
+    // Commit to public ranges
+    builder
+        .commit_sent(&RangeSet::from(public_sent_commitment_ids))
+        .context("Error committing to public sent ranges")?;
+    builder
+        .commit_recv(&RangeSet::from(public_received_commitment_ids))
+        .context("Error committing to public received ranges")?;
 
     // Finalize, returning the notarized session
-    let notarized_session = prover
-        .finalize()
+    let config = builder
+        .build()
+        .context("Error building transcript commit config")?;
+
+    prover.transcript_commit(config);
+
+    // Finalize, returning the notarized session
+    let request_config = RequestConfig::default();
+    let (attestation, secrets) = prover
+        .finalize(&request_config)
         .await
-        .context("Error finalizing notarization")?;
+        .context("Error finalizing prover")?;
 
     debug!("Notarization complete!");
 
-    Ok((
-        sent_commitment_ids,
-        recived_commitment_ids,
-        notarized_session,
-    ))
-}
-
-pub(super) fn build_proof(
-    (sent_commitment_ids, received_commitment_ids, notarized_session): (
-        Vec<CommitmentId>,
-        Vec<CommitmentId>,
-        NotarizedSession,
-    ),
-) -> TlsProof {
-    let session_proof = notarized_session.session_proof();
-
-    let mut proof_builder = notarized_session.data().build_substrings_proof();
-
-    for id in sent_commitment_ids {
-        proof_builder.reveal_by_id(id).unwrap();
-    }
-    for id in received_commitment_ids {
-        proof_builder.reveal_by_id(id).unwrap();
-    }
-
-    let substrings_proof = proof_builder.build().unwrap();
-
-    TlsProof {
-        session: session_proof,
-        substrings: substrings_proof,
-    }
+    Ok((attestation, secrets))
 }
 
 pub(super) fn extract_private_data(

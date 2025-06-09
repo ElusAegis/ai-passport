@@ -4,9 +4,7 @@ mod tlsn_operations;
 
 use crate::remote::attribution::config::{setup_config, Config, ModelSettings};
 use crate::remote::attribution::setup_notary::setup_connections;
-use crate::remote::attribution::tlsn_operations::{
-    build_proof, extract_private_data, notarise_session,
-};
+use crate::remote::attribution::tlsn_operations::{extract_private_data, notarise_session};
 use anyhow::{Context, Result};
 use http_body_util::BodyExt;
 use hyper::client::conn::http1::SendRequest;
@@ -17,7 +15,7 @@ use std::fs::File;
 use std::io::Write;
 use std::path::PathBuf;
 use std::str;
-use tlsn_prover::tls::ProverControl;
+use tlsn_prover::ProverControl;
 use tracing::{debug, warn};
 
 pub async fn generate_conversation_attribution() -> Result<()> {
@@ -84,16 +82,13 @@ pub async fn generate_conversation_attribution() -> Result<()> {
 
     // Notarize the session
     debug!("Notarizing the session...");
-    let notarised_session = notarise_session(prover_task, &recv_private_data, &sent_private_data)
-        .await
-        .context("Error notarizing the session")?;
-
-    // Build the proof
-    debug!("Building the proof...");
-    let proof = build_proof(notarised_session);
+    let (notarised_session, _) =
+        notarise_session(prover_task, &recv_private_data, &sent_private_data)
+            .await
+            .context("Error notarizing the session")?;
 
     // Save the proof to a file
-    let file_path = save_proof_to_file(&proof, &config.model_settings.id)?;
+    let file_path = save_proof_to_file(&notarised_session, &config.model_settings.id)?;
 
     println!("✅ Proof successfully saved to `{}`.", file_path.display());
     println!(
