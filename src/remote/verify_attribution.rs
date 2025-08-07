@@ -65,11 +65,11 @@ pub fn verify_attribution(proof_path: &str) -> Result<(), Box<dyn std::error::Er
     println!();
     println!("Messages sent:");
     println!();
-    println!("{}", sent);
+    println!("{sent}");
     println!();
     println!("Messages received:");
     println!();
-    println!("{}", recv);
+    println!("{recv}");
     println!("-------------------------------------------------------------------");
 
     Ok(())
@@ -80,5 +80,5 @@ fn notary_pubkey() -> Result<k256::PublicKey, String> {
     let pem_file = include_str!("../../tlsn/notary.pub");
 
     k256::PublicKey::from_public_key_pem(pem_file)
-        .map_err(|e| format!("Failed to parse Notary pubkey: {}", e))
+        .map_err(|e| format!("Failed to parse Notary pubkey: {e}"))
 }

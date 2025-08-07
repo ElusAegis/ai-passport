@@ -153,7 +153,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
                 remote::verify_attribution(proof_path)
                     .map_err(|err| format!("Error verifying attribution: {}", err))?;
             } else {
-                eprintln!("Error: The specified remote feature is not available yet. Currently, only 'anthropic-conversation' is supported.");
+                eprintln!("Error: The specified remote feature is not available yet. Currently, only 'attributed-conversation' is supported.");
                 std::process::exit(1);
             }
         }

@@ -1,16 +1,15 @@
-use crate::remote::attribution::config::Config;
+use crate::remote::attribution::config::ApplicationConfig;
 use anyhow::{Context, Result};
 use futures::{AsyncRead, AsyncWrite};
 use hyper::client::conn::http1::SendRequest;
 use hyper_util::rt::TokioIo;
 use k256::{pkcs8::DecodePrivateKey, SecretKey};
 use notary_client::{Accepted, NotarizationRequest, NotaryClient};
-use tlsn_common::config::{ProtocolConfig, ProtocolConfigValidator};
+use tlsn_common::config::{NetworkSetting, ProtocolConfig, ProtocolConfigValidator};
 use tlsn_core::attestation::AttestationConfig;
 use tlsn_core::signing::SignatureAlgId;
 use tlsn_core::CryptoProvider;
-use tlsn_prover::state::Closed;
-use tlsn_prover::{Prover, ProverConfig, ProverControl, ProverError};
+use tlsn_prover::{state, Prover, ProverConfig, ProverError};
 use tlsn_verifier::{Verifier, VerifierConfig};
 use tokio::task::JoinHandle;
 use tokio_util::compat::FuturesAsyncReadCompatExt;
@@ -23,10 +22,9 @@ const MAX_SENT_DATA: usize = 1 << 12;
 const MAX_RECV_DATA: usize = 1 << 14;
 
 pub(super) async fn setup_connections(
-    config: &Config,
+    config: &ApplicationConfig,
 ) -> Result<(
-    ProverControl,
-    JoinHandle<Result<Prover<Closed>, ProverError>>,
+    JoinHandle<Result<Prover<state::Committed>, ProverError>>,
     SendRequest<String>,
 )> {
     let prover = if cfg!(feature = "dummy-notary") {
@@ -61,17 +59,22 @@ pub(super) async fn setup_connections(
             .context("Error setting up prover")?
     } else {
         // Build a client to connect to the notary server.
-        let notary_client = NotaryClient::builder()
+        let notary_client: NotaryClient = NotaryClient::builder()
             .host(config.notary_settings.host)
             .port(config.notary_settings.port)
-            .enable_tls(true)
+            .path_prefix(config.notary_settings.path)
+            .enable_tls(config.notary_settings.enable_tls)
             .build()
             .context("Error building notary client")?;
 
         // Send requests for configuration and notarization to the notary server.
-        let notarization_request = NotarizationRequest::builder()
+        let notarization_request: NotarizationRequest = NotarizationRequest::builder()
+            .max_sent_data(MAX_SENT_DATA)
+            .max_recv_data(MAX_RECV_DATA)
             .build()
             .context("Error building notarization request")?;
+
+        debug!("Requesting notarization...");
 
         let Accepted {
             io: notary_connection,
@@ -79,18 +82,24 @@ pub(super) async fn setup_connections(
             ..
         } = notary_client
             .request_notarization(notarization_request)
-            .await
-            .context("Error requesting notarization")?;
+            .await?;
+
+        debug!("Notary connection established!");
 
         // Set up protocol configuration for prover.
-        let protocol_config = ProtocolConfig::builder()
+        let protocol_config: ProtocolConfig = ProtocolConfig::builder()
+            // .max_sent_records(1) // TODO - make sure this is what we want
             .max_sent_data(MAX_SENT_DATA)
+            // .max_recv_records_online(1) // TODO - make sure this is what we want
+            // .network(
+            //     NetworkSetting::Latency, // TODO - make sure this is what we want
+            // )
             .max_recv_data(MAX_RECV_DATA)
             .build()
             .context("Error building protocol configuration")?;
 
         // Configure a new prover with the unique session id returned from notary client.
-        let prover_config = ProverConfig::builder()
+        let prover_config: ProverConfig = ProverConfig::builder()
             .server_name(config.model_settings.api_settings.server_domain)
             .protocol_config(protocol_config)
             .build()
@@ -117,9 +126,6 @@ pub(super) async fn setup_connections(
         .context("Error connecting Prover to server")?;
     let tls_connection = TokioIo::new(tls_connection.compat());
 
-    // Grab a control handle to the Prover
-    let prover_ctrl = prover_fut.control();
-
     // Spawn the Prover to be run concurrently
     let prover_task = tokio::spawn(prover_fut);
 
@@ -131,7 +137,7 @@ pub(super) async fn setup_connections(
     // Spawn the HTTP task to be run concurrently
     tokio::spawn(connection);
 
-    Ok((prover_ctrl, prover_task, request_sender))
+    Ok((prover_task, request_sender))
 }
 
 /// Runs a simple Notary with the provided connection to the Prover.
@@ -167,6 +173,7 @@ pub async fn run_notary<T: AsyncWrite + AsyncRead + Send + Unpin + 'static>(conn
         .build()
         .context("Failed to build attestation config")?;
 
+    #[allow(deprecated)]
     Verifier::new(config)
         .notarize(conn, &attestation_config)
         .await

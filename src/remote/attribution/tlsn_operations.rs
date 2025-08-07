@@ -1,115 +1,102 @@
-use anyhow::{Context, Error};
+use anyhow::{anyhow, Result};
 use hyper::HeaderMap;
-use std::ops::Range;
+use spansy::Spanned;
 use tlsn_core::attestation::Attestation;
 use tlsn_core::request::RequestConfig;
 use tlsn_core::transcript::TranscriptCommitConfig;
 use tlsn_core::Secrets;
-use tlsn_prover::state::Closed;
-use tlsn_prover::{Prover, ProverError};
-use tokio::task::JoinHandle;
+use tlsn_formats::http::{DefaultHttpCommitter, HttpCommit, HttpTranscript};
+use tlsn_prover::{state, Prover};
 use tracing::debug;
-use utils::range::RangeSet;
 
 pub(super) async fn notarise_session(
-    prover_task: JoinHandle<anyhow::Result<Prover<Closed>, ProverError>>,
-    recv_private_data: &[Vec<u8>],
-    sent_private_data: &[Vec<u8>],
-) -> Result<(Attestation, Secrets), Error> {
-    // The Prover task should be done now, so we can grab it.
-    let prover = prover_task
-        .await
-        .context("Error waiting for prover task")??;
+    mut prover: Prover<state::Committed>,
+    _recv_private_data: &[Vec<u8>],
+    _sent_private_data: &[Vec<u8>],
+) -> Result<(Attestation, Secrets)> {
+    // Parse the HTTP transcript.
+    let transcript = HttpTranscript::parse(prover.transcript())?;
 
-    // Prepare for notarization
-    let mut prover = prover.start_notarize();
+    let body_content = &transcript.responses[0].body.as_ref().unwrap().content;
+    let body = String::from_utf8_lossy(body_content.span().as_bytes());
+    debug!("Response body: {}", body);
 
-    // Notarize the session
-    let (public_sent_commitment_ids, _) = find_ranges(
-        prover.transcript().sent(),
-        &sent_private_data
-            .iter()
-            .map(|v| v.as_slice())
-            .collect::<Vec<&[u8]>>(),
-    );
-
-    let (public_received_commitment_ids, _) = find_ranges(
-        prover.transcript().received(),
-        &recv_private_data
-            .iter()
-            .map(|v| v.as_slice())
-            .collect::<Vec<&[u8]>>(),
-    );
-
+    // Commit to the transcript.
     let mut builder = TranscriptCommitConfig::builder(prover.transcript());
 
-    // Commit to public ranges
-    builder
-        .commit_sent(&RangeSet::from(public_sent_commitment_ids))
-        .context("Error committing to public sent ranges")?;
-    builder
-        .commit_recv(&RangeSet::from(public_received_commitment_ids))
-        .context("Error committing to public received ranges")?;
+    // This commits to various parts of the transcript separately (e.g. request
+    // headers, response headers, response body and more). See https://docs.tlsnotary.org//protocol/commit_strategy.html
+    // for other strategies that can be used to generate commitments.
+    DefaultHttpCommitter::default().commit_transcript(&mut builder, &transcript)?;
 
     // Finalize, returning the notarized session
-    let config = builder
+    let transcript_commit = builder
         .build()
-        .context("Error building transcript commit config")?;
+        .map_err(|e| anyhow!("Error building transcript commit: {:?}", e))?;
 
-    prover.transcript_commit(config);
+    // Build an attestation request.
+    let mut builder = RequestConfig::builder();
 
-    // Finalize, returning the notarized session
-    let request_config = RequestConfig::default();
-    let (attestation, secrets) = prover
-        .finalize(&request_config)
-        .await
-        .context("Error finalizing prover")?;
+    // // Commit to public ranges
+    // builder
+    //     .commit_sent(&RangeSet::from(public_sent_commitment_ids))
+    //     .context("Error committing to public sent ranges")?;
+    // builder
+    //     .commit_recv(&RangeSet::from(public_received_commitment_ids))
+    //     .context("Error committing to public received ranges")?;
+
+    builder.transcript_commit(transcript_commit);
+
+    let request_config = builder.build()?;
+
+    #[allow(deprecated)]
+    let (attestation, secrets) = prover.notarize(&request_config).await?;
 
     debug!("Notarization complete!");
 
     Ok((attestation, secrets))
 }
 
-pub(super) fn extract_private_data(
-    recv_private_data: &mut Vec<Vec<u8>>,
-    headers: &HeaderMap,
-    topics_to_censor: &[&str],
-) {
-    for (header_name, header_value) in headers {
-        if topics_to_censor.contains(&header_name.as_str()) {
-            let header_value = header_value.as_bytes().to_vec();
-            if !recv_private_data.contains(&header_value) {
-                recv_private_data.push(header_value);
-            }
-        }
-    }
-}
+// pub(super) fn extract_private_data(
+//     recv_private_data: &mut Vec<Vec<u8>>,
+//     headers: &HeaderMap,
+//     topics_to_censor: &[&str],
+// ) {
+//     for (header_name, header_value) in headers {
+//         if topics_to_censor.contains(&header_name.as_str()) {
+//             let header_value = header_value.as_bytes().to_vec();
+//             if !recv_private_data.contains(&header_value) {
+//                 recv_private_data.push(header_value);
+//             }
+//         }
+//     }
+// }
 
-fn find_ranges(seq: &[u8], sub_seq: &[&[u8]]) -> (Vec<Range<usize>>, Vec<Range<usize>>) {
-    let mut private_ranges = Vec::new();
-    for s in sub_seq {
-        for (idx, w) in seq.windows(s.len()).enumerate() {
-            if w == *s {
-                private_ranges.push(idx..(idx + w.len()));
-            }
-        }
-    }
-
-    let mut sorted_ranges = private_ranges.clone();
-    sorted_ranges.sort_by_key(|r| r.start);
-
-    let mut public_ranges = Vec::new();
-    let mut last_end = 0;
-    for r in sorted_ranges {
-        if r.start > last_end {
-            public_ranges.push(last_end..r.start);
-        }
-        last_end = r.end;
-    }
-
-    if last_end < seq.len() {
-        public_ranges.push(last_end..seq.len());
-    }
-
-    (public_ranges, private_ranges)
-}
+// fn find_ranges(seq: &[u8], sub_seq: &[&[u8]]) -> (Vec<Range<usize>>, Vec<Range<usize>>) {
+//     let mut private_ranges = Vec::new();
+//     for s in sub_seq {
+//         for (idx, w) in seq.windows(s.len()).enumerate() {
+//             if w == *s {
+//                 private_ranges.push(idx..(idx + w.len()));
+//             }
+//         }
+//     }
+//
+//     let mut sorted_ranges = private_ranges.clone();
+//     sorted_ranges.sort_by_key(|r| r.start);
+//
+//     let mut public_ranges = Vec::new();
+//     let mut last_end = 0;
+//     for r in sorted_ranges {
+//         if r.start > last_end {
+//             public_ranges.push(last_end..r.start);
+//         }
+//         last_end = r.end;
+//     }
+//
+//     if last_end < seq.len() {
+//         public_ranges.push(last_end..seq.len());
+//     }
+//
+//     (public_ranges, private_ranges)
+// }

@@ -2,9 +2,9 @@ mod config;
 mod setup_notary;
 mod tlsn_operations;
 
-use crate::remote::attribution::config::{setup_config, Config, ModelSettings};
+use crate::remote::attribution::config::{setup_config, ApplicationConfig, ModelSettings};
 use crate::remote::attribution::setup_notary::setup_connections;
-use crate::remote::attribution::tlsn_operations::{extract_private_data, notarise_session};
+use crate::remote::attribution::tlsn_operations::notarise_session;
 use anyhow::{Context, Result};
 use http_body_util::BodyExt;
 use hyper::client::conn::http1::SendRequest;
@@ -15,10 +15,9 @@ use std::fs::File;
 use std::io::Write;
 use std::path::PathBuf;
 use std::str;
-use tlsn_prover::ProverControl;
-use tracing::{debug, warn};
+use tracing::debug;
 
-pub async fn generate_conversation_attribution() -> Result<()> {
+pub async fn generate_conversation_attribution() -> anyhow::Result<()> {
     // Print the rules on how to use the application
     println!("🌟 Welcome to the Multi-Model Prover CLI! 🌟");
     println!("This application allows you to interact with various AI models and then generate a cryptographic proof of your conversation.");
@@ -28,9 +27,7 @@ pub async fn generate_conversation_attribution() -> Result<()> {
 
     println!("🔐 Next, please wait while the system is setup...");
 
-    let (prover_ctrl, prover_task, mut request_sender) = setup_connections(&config)
-        .await
-        .context("Error setting up connections")?;
+    let (prover_task, mut request_sender) = setup_connections(&config).await?;
 
     println!(
         "💬 Now, you can engage in a conversation with the `{}` model.",
@@ -45,45 +42,24 @@ pub async fn generate_conversation_attribution() -> Result<()> {
 
     let mut messages = vec![];
 
-    let mut request_index = 1;
-
     let mut recv_private_data = vec![];
     let mut sent_private_data = vec![];
 
-    loop {
-        let stop = single_interaction_round(
-            &mut request_sender,
-            &config,
-            &mut messages,
-            request_index,
-            &mut recv_private_data,
-            &mut sent_private_data,
-        )
-        .await?;
-
-        if stop {
-            break;
-        }
-        request_index += 1;
-    }
-
-    debug!("Shutting down the connection with the API...");
-
-    // Shutdown the connection by sending a final dummy request to the API
-    shutdown_connection(
-        prover_ctrl,
+    single_interaction_round(
         &mut request_sender,
-        &mut recv_private_data,
         &config,
+        &mut messages,
+        &mut recv_private_data,
+        &mut sent_private_data,
     )
-    .await;
+    .await?;
 
     println!("🔒 Generating a cryptographic proof of the conversation. Please wait...");
 
     // Notarize the session
     debug!("Notarizing the session...");
     let (notarised_session, _) =
-        notarise_session(prover_task, &recv_private_data, &sent_private_data)
+        notarise_session(prover_task.await??, &recv_private_data, &sent_private_data)
             .await
             .context("Error notarizing the session")?;
 
@@ -111,37 +87,25 @@ pub async fn generate_conversation_attribution() -> Result<()> {
 
 async fn single_interaction_round(
     request_sender: &mut SendRequest<String>,
-    config: &Config,
+    config: &ApplicationConfig,
     messages: &mut Vec<serde_json::Value>,
-    request_index: i32,
-    recv_private_data: &mut Vec<Vec<u8>>,
-    sent_private_data: &mut Vec<Vec<u8>>,
-) -> Result<bool> {
+    _recv_private_data: &mut Vec<Vec<u8>>,
+    _sent_private_data: &mut Vec<Vec<u8>>,
+) -> Result<()> {
     let mut user_message = String::new();
-    // The first request is the setup prompt
-    if request_index == 1 {
-        user_message = config.model_settings.setup_prompt.to_string();
-        debug!(
-            "Sending setup prompt to `{}` model API: {}",
-            config.model_settings.id, user_message
-        );
-    } else {
-        println!("\n💬 Your message\n(type 'exit' to end): ");
 
-        print!("> ");
-        std::io::stdout()
-            .flush()
-            .context("Failed to flush stdout")?;
+    println!("\n💬 Your message\n(type 'exit' to end): ");
 
-        std::io::stdin()
-            .read_line(&mut user_message)
-            .context("Failed to read user input to the model")?;
-        println!("processing...");
-    }
+    print!("> ");
+    std::io::stdout()
+        .flush()
+        .context("Failed to flush stdout")?;
 
-    if user_message.trim().is_empty() || user_message.trim() == "exit" {
-        return Ok(true);
-    }
+    std::io::stdin()
+        .read_line(&mut user_message)
+        .context("Failed to read user input to the model")?;
+
+    println!("processing...");
 
     let user_message = user_message.trim();
     let user_message = serde_json::json!(
@@ -154,74 +118,54 @@ async fn single_interaction_round(
     messages.push(user_message);
 
     // Prepare the Request to send to the model's API
-    let request = generate_request(messages, &config.model_settings)
-        .context(format!("Error generating #{request_index} request"))?;
+    let request =
+        generate_request(messages, &config.model_settings).context("Error generating request")?;
 
-    // Collect the private data transmitted in the request
-    extract_private_data(
-        sent_private_data,
-        request.headers(),
-        config.privacy_settings.request_topics_to_censor,
-    );
+    debug!("Request: {:?}", request);
 
-    debug!("Request {request_index}: {:?}", request);
-
-    debug!("Sending request {request_index} to Model's API...");
+    debug!("Sending request to Model's API...");
 
     let response = request_sender
         .send_request(request)
         .await
-        .context(format!("Request #{request_index} failed"))?;
+        .context("Request failed")?;
 
-    debug!("Received response {request_index} from Model");
+    debug!("Received response from Model");
 
-    debug!("Raw response {request_index}: {:?}", response);
+    debug!("Raw response: {:?}", response);
 
     if response.status() != StatusCode::OK {
-        // TODO - do a graceful shutdown
-        panic!(
-            "Request {request_index} failed with status: {}",
-            response.status()
-        );
+        panic!("Request failed with status: {}", response.status());
     }
+    //
+    // // Collect the body
+    // let payload = response
+    //     .into_body()
+    //     .collect()
+    //     .await
+    //     .context("Error reading response body")?
+    //     .to_bytes();
+    //
+    // let parsed = serde_json::from_str::<serde_json::Value>(&String::from_utf8_lossy(&payload))
+    //     .context("Error parsing the response")?;
+    //
+    // // Pretty printing the response
+    // debug!(
+    //     "Response: {}",
+    //     serde_json::to_string_pretty(&parsed).context("Error pretty printing the response")?
+    // );
+    //
+    // debug!("Request to Model succeeded");
+    //
+    // let received_assistant_message = serde_json::json!({"role": "assistant", "content": parsed["choices"][0]["message"]["content"]});
+    // messages.push(received_assistant_message);
+    //
+    // println!(
+    //     "\n🤖 Assistant's response:\n\n{}\n",
+    //     parsed["choices"][0]["message"]["content"]
+    // );
 
-    // Collect the received private data
-    extract_private_data(
-        recv_private_data,
-        response.headers(),
-        config.privacy_settings.response_topics_to_censor,
-    );
-
-    // Collect the body
-    let payload = response
-        .into_body()
-        .collect()
-        .await
-        .context("Error reading response body")?
-        .to_bytes();
-
-    let parsed = serde_json::from_str::<serde_json::Value>(&String::from_utf8_lossy(&payload))
-        .context("Error parsing the response")?;
-
-    // Pretty printing the response
-    debug!(
-        "Response {request_index}: {}",
-        serde_json::to_string_pretty(&parsed).context("Error pretty printing the response")?
-    );
-
-    debug!("Request {request_index} to Model succeeded");
-
-    let received_assistant_message = serde_json::json!({"role": "assistant", "content": parsed["choices"][0]["message"]["content"]});
-    messages.push(received_assistant_message);
-
-    if request_index != 1 {
-        println!(
-            "\n🤖 Assistant's response:\n\n{}\n",
-            parsed["choices"][0]["message"]["content"]
-        );
-    }
-
-    Ok(false)
+    Ok(())
 }
 
 fn generate_request(
@@ -240,7 +184,7 @@ fn generate_request(
         .uri(model_settings.api_settings.inference_route)
         .header(HOST, model_settings.api_settings.server_domain)
         .header("Accept-Encoding", "identity")
-        .header(CONNECTION, "keep-alive")
+        .header(CONNECTION, "close")
         .header(CONTENT_TYPE, "application/json")
         .header(
             AUTHORIZATION,
@@ -248,58 +192,6 @@ fn generate_request(
         )
         .body(json_body.to_string())
         .context("Error building the request")
-}
-
-async fn shutdown_connection(
-    prover_ctrl: ProverControl,
-    request_sender: &mut SendRequest<String>,
-    recv_private_data: &mut Vec<Vec<u8>>,
-    config: &Config,
-) {
-    debug!("Conversation ended, sending final request to Model's API to shut down the session...");
-
-    // Prepare final request to close the session
-    let close_connection_request = hyper::Request::builder()
-        .header(HOST, config.model_settings.api_settings.server_domain)
-        .uri(config.model_settings.api_settings.inference_route)
-        .header("Accept-Encoding", "identity")
-        .header(CONNECTION, "close") // This will instruct the server to close the connection
-        .body(String::new())
-        .unwrap();
-
-    debug!("Sending final request to Model's API...");
-
-    // As this is the last request, we can defer decryption until the end.
-    prover_ctrl.defer_decryption().await.unwrap();
-
-    let response = request_sender
-        .send_request(close_connection_request)
-        .await
-        .unwrap();
-
-    // Collect the received private data
-    extract_private_data(
-        recv_private_data,
-        response.headers(),
-        config.privacy_settings.response_topics_to_censor,
-    );
-
-    // Collect the body
-    let payload = response.into_body().collect().await.unwrap().to_bytes();
-
-    let parsed = serde_json::from_str::<serde_json::Value>(&String::from_utf8_lossy(&payload))
-        .unwrap_or_else(|_| {
-            warn!("Error parsing the response");
-            serde_json::json!({
-                "error": "Error parsing the response"
-            })
-        });
-
-    // Pretty printing the response
-    debug!(
-        "Shutdown response (error response is expected ): {}",
-        serde_json::to_string_pretty(&parsed).unwrap()
-    );
 }
 
 pub fn save_proof_to_file<T: Serialize>(proof: &T, model_id: &str) -> Result<PathBuf> {

@@ -1,13 +1,10 @@
 use crate::remote::attribution::config::model_selection::select_model_id;
 use anyhow::{Context, Result};
+use derive_builder::Builder;
 use load_api_key::load_api_key;
-use std::sync::LazyLock;
 
 mod load_api_key;
 mod model_selection;
-
-static SETUP_PROMPT: LazyLock<&str> =
-    LazyLock::new(|| "Model Prompt: YOU ARE GOING TO BE ACTING AS A HELPFUL ASSISTANT");
 
 /// Configuration for API settings, including server endpoints and the API key
 #[derive(Debug, Default)]
@@ -34,6 +31,7 @@ pub struct NotarySettings {
     pub host: &'static str,
     pub port: u16,
     pub path: &'static str,
+    pub enable_tls: bool,
 }
 
 /// Configuration for Notary settings, defining host, port, and path
@@ -42,20 +40,33 @@ impl Default for NotarySettings {
         NotarySettings {
             host: "notary.pse.dev",
             port: 443,
-            path: "nightly",
+            path: "v0.1.0-alpha.12",
+            enable_tls: true,
+        }
+    }
+}
+
+impl NotarySettings {
+    fn local() -> Self {
+        NotarySettings {
+            host: "localhost",
+            port: 7047,
+            path: "",
+            enable_tls: false,
         }
     }
 }
 
 /// Privacy settings including topics to censor in requests and responses
-#[derive(Debug, Default)]
+#[derive(Debug)]
+#[allow(dead_code)]
 pub struct PrivacySettings {
     pub request_topics_to_censor: &'static [&'static str],
     pub response_topics_to_censor: &'static [&'static str],
 }
 
-impl PrivacySettings {
-    fn new() -> Self {
+impl Default for PrivacySettings {
+    fn default() -> Self {
         Self {
             request_topics_to_censor: &["authorization"],
             response_topics_to_censor: &[
@@ -76,7 +87,6 @@ impl PrivacySettings {
 pub struct ModelSettings {
     pub api_settings: ModelApiSettings,
     pub id: String,
-    pub setup_prompt: &'static str,
 }
 
 impl ModelSettings {
@@ -84,31 +94,24 @@ impl ModelSettings {
         Self {
             api_settings,
             id: model_id,
-            setup_prompt: *SETUP_PROMPT,
         }
     }
 }
 
 /// Complete application configuration including model, privacy, and notary settings
-#[derive(Debug)]
-pub struct Config {
-    pub model_settings: ModelSettings,
-    pub privacy_settings: PrivacySettings,
-    pub notary_settings: NotarySettings,
-}
-
-impl Config {
-    fn new(model_settings: ModelSettings) -> Self {
-        Self {
-            model_settings,
-            privacy_settings: PrivacySettings::new(),
-            notary_settings: NotarySettings::default(),
-        }
-    }
+#[derive(Builder, Debug)]
+#[builder(pattern = "owned")]
+pub(crate) struct ApplicationConfig {
+    pub(crate) model_settings: ModelSettings,
+    #[builder(default)]
+    #[allow(dead_code)]
+    pub(crate) privacy_settings: PrivacySettings,
+    #[builder(default)]
+    pub(crate) notary_settings: NotarySettings,
 }
 
 /// Setup configuration by loading API key, selecting a model, and returning Config
-pub(super) async fn setup_config() -> Result<Config> {
+pub(crate) async fn setup_config() -> Result<ApplicationConfig> {
     let api_key = load_api_key().context("Failed to load API key")?;
     let api_settings = ModelApiSettings::new(api_key.clone());
 
@@ -118,5 +121,15 @@ pub(super) async fn setup_config() -> Result<Config> {
 
     let model_settings = ModelSettings::new(model_id, api_settings);
 
-    Ok(Config::new(model_settings))
+    // Check if the LOCAL_NOTARY environment variable is set
+    let notary_settings = if std::env::var("LOCAL_NOTARY").is_ok() {
+        NotarySettings::local()
+    } else {
+        NotarySettings::default()
+    };
+
+    Ok(ApplicationConfigBuilder::default()
+        .model_settings(model_settings)
+        .notary_settings(notary_settings)
+        .build()?)
 }
