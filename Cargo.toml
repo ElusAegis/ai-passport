@@ -45,6 +45,7 @@ once_cell = { version = "1.21", optional = true }
 hyper-tls = { version = "0.6", optional = true }
 
 derive_builder = { version = "0.20.2", optional = true }
+inquire = "0.7.5"
 
 [features]
 default = ["remote"]

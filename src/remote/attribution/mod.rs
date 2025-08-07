@@ -179,11 +179,17 @@ fn generate_request(
     json_body.insert("messages".to_string(), messages);
     let json_body = serde_json::Value::Object(json_body);
 
+    println!(
+        "Inference route: {}",
+        model_settings.api_settings.inference_route
+    );
+    println!("Body: {}", json_body);
+
     // Build the HTTP request to send the prompt to Model's API
     hyper::Request::builder()
         .method(Method::POST)
         .uri(model_settings.api_settings.inference_route.as_str())
-        .header(HOST, model_settings.api_settings.server_domain.as_str())
+        .header(HOST, model_settings.api_settings.domain.as_str())
         .header("Accept-Encoding", "identity")
         .header(CONNECTION, "close")
         .header(CONTENT_TYPE, "application/json")

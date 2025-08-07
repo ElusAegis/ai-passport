@@ -1,9 +1,13 @@
 use anyhow::{Context, Result};
+use inquire::Password;
 use std::env;
-use std::io::Write;
 
-const API_KEY_ENV_VAR: &str = "REDPILL_API_KEY";
+const API_KEY_ENV_VAR: &str = "MODEL_API_KEY";
 
+/// Loads the Model API key from the environment or interactively prompts the user.
+/// The key must correspond to the Model API domain you have configured.
+///
+/// If you do not have an API key, please obtain one from your Model API provider.
 pub(crate) fn load_api_key() -> Result<String> {
     dotenv::dotenv().ok();
 
@@ -11,22 +15,19 @@ pub(crate) fn load_api_key() -> Result<String> {
         return Ok(api_key);
     }
 
-    // Prompt the user to enter the API key if not set
     println!("🔑 The `{API_KEY_ENV_VAR}` environment variable is not set.");
-    println!("To interact with the models, you need to provide the API key.");
-    println!("If you do not have an API key, you can sign up for one at:");
-    println!("`https://red-pill.ai/keys`");
-    print!("Please now enter your Red Pill API key: ");
-    std::io::stdout()
-        .flush()
-        .context("Failed to flush stdout")?;
+    println!("To interact with the models, you need to provide the API key for your configured Model API domain.");
+    println!("If you do not have an API key, please obtain one from your Model API provider.");
+    println!();
 
-    // Capture user input for the API key
-    let mut api_key_input = String::new();
-    std::io::stdin()
-        .read_line(&mut api_key_input)
-        .context("Failed to read user API key input")?;
-    let api_key = api_key_input.trim().to_string();
+    let api_key = Password::new("Please enter your Model API key:")
+        .without_confirmation()
+        .prompt()
+        .context("Failed to read Model API key input")?;
+
+    if api_key.trim().is_empty() {
+        anyhow::bail!("Model API key cannot be empty.");
+    }
 
     Ok(api_key)
 }

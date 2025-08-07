@@ -37,7 +37,7 @@ pub(super) async fn setup_connections(
 
         // A Prover configuration
         let prover_config = ProverConfig::builder()
-            .server_name(config.model_settings.api_settings.server_domain.as_str())
+            .server_name(config.model_settings.api_settings.domain.as_str())
             .protocol_config(
                 ProtocolConfig::builder()
                     // We must configure the amount of data we expect to exchange beforehand, which will
@@ -93,7 +93,7 @@ pub(super) async fn setup_connections(
 
         // Configure a new prover with the unique session id returned from notary client.
         let prover_config: ProverConfig = ProverConfig::builder()
-            .server_name(config.model_settings.api_settings.server_domain.as_str())
+            .server_name(config.model_settings.api_settings.domain.as_str())
             .protocol_config(protocol_config)
             .build()
             .context("Error building prover configuration")?;
@@ -107,12 +107,10 @@ pub(super) async fn setup_connections(
 
     debug!("Prover setup complete!");
     // Open a new socket to the application server.
-    let client_socket = tokio::net::TcpStream::connect((
-        config.model_settings.api_settings.server_domain.as_str(),
-        443,
-    ))
-    .await
-    .context("Error connecting to server")?;
+    let client_socket =
+        tokio::net::TcpStream::connect((config.model_settings.api_settings.domain.as_str(), 443))
+            .await
+            .context("Error connecting to server")?;
 
     // Bind the Prover to server connection
     let (tls_connection, prover_fut) = prover

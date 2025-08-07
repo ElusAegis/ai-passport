@@ -1,18 +1,20 @@
-use crate::remote::attribution::config::model_selection::select_model_id;
 use anyhow::{Context, Result};
 use derive_builder::Builder;
-use load_api_key::load_api_key;
 
+use crate::remote::attribution::config::{
+    load_api_domain::load_api_domain, load_api_key::load_api_key, select_model::select_model_id,
+};
+
+mod load_api_domain;
 mod load_api_key;
-mod model_selection;
+mod select_model;
 
 /// Configuration for API settings, including server endpoints and the API key
 /// The API is expected to follow the OpenAI API specification
 #[derive(Builder)]
 pub(crate) struct ModelApiSettings {
     /// The domain of the server hosting the model API
-    #[builder(setter(into), default = "String::from(\"api.red-pill.ai\")")]
-    pub(crate) server_domain: String,
+    pub(crate) domain: String,
     /// The route for inference requests
     #[builder(setter(into), default = "String::from(\"/v1/chat/completions\")")]
     pub(crate) inference_route: String,
@@ -87,9 +89,12 @@ impl ApplicationConfig {
 
     /// Setup configuration by loading API key, selecting a model, and returning Config
     pub(crate) async fn setup() -> Result<Self> {
+        let api_domain = load_api_domain().context("Failed to load API domain")?;
         let api_key = load_api_key().context("Failed to load API key")?;
+
         let api_settings: ModelApiSettings = ModelApiSettings::builder()
             .api_key(api_key)
+            .domain(api_domain)
             .build()
             .context("Failed to build API settings")?;
 
