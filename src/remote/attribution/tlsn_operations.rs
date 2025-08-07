@@ -1,5 +1,4 @@
 use anyhow::{anyhow, Result};
-use hyper::HeaderMap;
 use spansy::Spanned;
 use tlsn_core::attestation::Attestation;
 use tlsn_core::request::RequestConfig;

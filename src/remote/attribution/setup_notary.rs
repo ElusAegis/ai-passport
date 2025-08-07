@@ -5,7 +5,7 @@ use hyper::client::conn::http1::SendRequest;
 use hyper_util::rt::TokioIo;
 use k256::{pkcs8::DecodePrivateKey, SecretKey};
 use notary_client::{Accepted, NotarizationRequest, NotaryClient};
-use tlsn_common::config::{NetworkSetting, ProtocolConfig, ProtocolConfigValidator};
+use tlsn_common::config::{ProtocolConfig, ProtocolConfigValidator};
 use tlsn_core::attestation::AttestationConfig;
 use tlsn_core::signing::SignatureAlgId;
 use tlsn_core::CryptoProvider;
@@ -33,11 +33,11 @@ pub(super) async fn setup_connections(
         let (prover_socket, notary_socket) = tokio::io::duplex(1 << 16);
 
         // Start a local simple notary service
-        tokio::spawn(run_notary(notary_socket.compat()));
+        tokio::spawn(use_dummy_notary(notary_socket.compat()));
 
         // A Prover configuration
         let prover_config = ProverConfig::builder()
-            .server_name(config.model_settings.api_settings.server_domain)
+            .server_name(config.model_settings.api_settings.server_domain.as_str())
             .protocol_config(
                 ProtocolConfig::builder()
                     // We must configure the amount of data we expect to exchange beforehand, which will
@@ -59,14 +59,7 @@ pub(super) async fn setup_connections(
             .context("Error setting up prover")?
     } else {
         // Build a client to connect to the notary server.
-        let notary_client: NotaryClient = NotaryClient::builder()
-            .host(config.notary_settings.host)
-            .port(config.notary_settings.port)
-            .path_prefix(config.notary_settings.path)
-            .enable_tls(config.notary_settings.enable_tls)
-            .build()
-            .context("Error building notary client")?;
-
+        let notary_client: NotaryClient = build_notary_client()?;
         // Send requests for configuration and notarization to the notary server.
         let notarization_request: NotarizationRequest = NotarizationRequest::builder()
             .max_sent_data(MAX_SENT_DATA)
@@ -100,7 +93,7 @@ pub(super) async fn setup_connections(
 
         // Configure a new prover with the unique session id returned from notary client.
         let prover_config: ProverConfig = ProverConfig::builder()
-            .server_name(config.model_settings.api_settings.server_domain)
+            .server_name(config.model_settings.api_settings.server_domain.as_str())
             .protocol_config(protocol_config)
             .build()
             .context("Error building prover configuration")?;
@@ -114,10 +107,12 @@ pub(super) async fn setup_connections(
 
     debug!("Prover setup complete!");
     // Open a new socket to the application server.
-    let client_socket =
-        tokio::net::TcpStream::connect((config.model_settings.api_settings.server_domain, 443))
-            .await
-            .context("Error connecting to server")?;
+    let client_socket = tokio::net::TcpStream::connect((
+        config.model_settings.api_settings.server_domain.as_str(),
+        443,
+    ))
+    .await
+    .context("Error connecting to server")?;
 
     // Bind the Prover to server connection
     let (tls_connection, prover_fut) = prover
@@ -141,7 +136,9 @@ pub(super) async fn setup_connections(
 }
 
 /// Runs a simple Notary with the provided connection to the Prover.
-pub async fn run_notary<T: AsyncWrite + AsyncRead + Send + Unpin + 'static>(conn: T) -> Result<()> {
+pub async fn use_dummy_notary<T: AsyncWrite + AsyncRead + Send + Unpin + 'static>(
+    conn: T,
+) -> Result<()> {
     // Load the notary signing key
     let signing_key_str = include_str!("../../../tlsn/notary.key");
     let signing_key = SecretKey::from_pkcs8_pem(signing_key_str)
@@ -180,4 +177,33 @@ pub async fn run_notary<T: AsyncWrite + AsyncRead + Send + Unpin + 'static>(conn
         .context("Failed to notarize")?;
 
     Ok(())
+}
+
+/// Builds a `NotaryClient` configured for either a local or remote notary server,
+/// depending on the `LOCAL_NOTARY` environment variable.
+/// Connects to a local server without TLS if set, otherwise uses the remote notary with TLS.
+/// Returns the configured `NotaryClient` or an error.
+///
+/// To run a local notary server, run `cargo run --release --bin notary-server`
+/// in the `[tlsn](https://github.com/tlsnotary/tlsn)` repository.
+fn build_notary_client() -> Result<NotaryClient> {
+    let mut notary_builder = NotaryClient::builder();
+
+    if std::env::var("LOCAL_NOTARY").is_ok() {
+        notary_builder
+            .host("localhost".to_string())
+            .port(7047)
+            .path_prefix("")
+            .enable_tls(false)
+    } else {
+        notary_builder
+            .host("notary.pse.dev")
+            .port(443)
+            .path_prefix("v0.1.0-alpha.12")
+            .enable_tls(true)
+    };
+
+    notary_builder
+        .build()
+        .context("Failed to build NotaryClient")
 }

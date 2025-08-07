@@ -2,11 +2,10 @@ mod config;
 mod setup_notary;
 mod tlsn_operations;
 
-use crate::remote::attribution::config::{setup_config, ApplicationConfig, ModelSettings};
+use crate::remote::attribution::config::{ApplicationConfig, ModelSettings};
 use crate::remote::attribution::setup_notary::setup_connections;
 use crate::remote::attribution::tlsn_operations::notarise_session;
 use anyhow::{Context, Result};
-use http_body_util::BodyExt;
 use hyper::client::conn::http1::SendRequest;
 use hyper::header::{AUTHORIZATION, CONNECTION, CONTENT_TYPE, HOST};
 use hyper::{Method, StatusCode};
@@ -23,15 +22,17 @@ pub async fn generate_conversation_attribution() -> anyhow::Result<()> {
     println!("This application allows you to interact with various AI models and then generate a cryptographic proof of your conversation.");
 
     println!("⚙️ First, you will need to set up your assistant model.");
-    let config = setup_config().await.context("Error setting up config")?;
+    let app_config = ApplicationConfig::setup()
+        .await
+        .context("Error setting up config")?;
 
     println!("🔐 Next, please wait while the system is setup...");
 
-    let (prover_task, mut request_sender) = setup_connections(&config).await?;
+    let (prover_task, mut request_sender) = setup_connections(&app_config).await?;
 
     println!(
         "💬 Now, you can engage in a conversation with the `{}` model.",
-        config.model_settings.id
+        app_config.model_settings.id
     );
     println!("The assistant will respond to your messages in real time.");
     println!("📝 When you're done, simply type 'exit' or press `Enter` without typing a message to end the conversation.");
@@ -47,7 +48,7 @@ pub async fn generate_conversation_attribution() -> anyhow::Result<()> {
 
     single_interaction_round(
         &mut request_sender,
-        &config,
+        &app_config,
         &mut messages,
         &mut recv_private_data,
         &mut sent_private_data,
@@ -64,7 +65,7 @@ pub async fn generate_conversation_attribution() -> anyhow::Result<()> {
             .context("Error notarizing the session")?;
 
     // Save the proof to a file
-    let file_path = save_proof_to_file(&notarised_session, &config.model_settings.id)?;
+    let file_path = save_proof_to_file(&notarised_session, &app_config.model_settings.id)?;
 
     println!("✅ Proof successfully saved to `{}`.", file_path.display());
     println!(
@@ -181,8 +182,8 @@ fn generate_request(
     // Build the HTTP request to send the prompt to Model's API
     hyper::Request::builder()
         .method(Method::POST)
-        .uri(model_settings.api_settings.inference_route)
-        .header(HOST, model_settings.api_settings.server_domain)
+        .uri(model_settings.api_settings.inference_route.as_str())
+        .header(HOST, model_settings.api_settings.server_domain.as_str())
         .header("Accept-Encoding", "identity")
         .header(CONNECTION, "close")
         .header(CONTENT_TYPE, "application/json")
