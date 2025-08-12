@@ -13,6 +13,11 @@ mod load_api_key;
 mod select_model;
 mod select_proof_path;
 
+// Maximum number of bytes that can be sent from prover to server
+const MAX_SENT_DATA: usize = 1 << 10;
+// Maximum number of bytes that can be received by prover from server
+const MAX_RECV_DATA: usize = 1 << 14;
+
 /// Privacy settings including topics to censor in requests and responses
 #[allow(dead_code)]
 pub(crate) struct PrivacyConfig {
@@ -61,6 +66,20 @@ impl ModelConfig {
     }
 }
 
+#[derive(Builder, Clone, Copy)]
+pub(crate) struct NotaryConfig {
+    /// Maximum number of bytes that can be sent from prover to server
+    pub(crate) max_sent_data: usize,
+    /// Maximum number of bytes that can be received by prover from server
+    pub(crate) max_recv_data: usize,
+}
+
+impl NotaryConfig {
+    pub(crate) fn builder() -> NotaryConfigBuilder {
+        NotaryConfigBuilder::default()
+    }
+}
+
 #[derive(Subcommand, Debug)]
 pub enum Command {
     /// Prove model interaction
@@ -76,8 +95,15 @@ pub struct ProveArgs {
     #[arg(long)]
     pub(crate) model_id: Option<String>,
     /// Path to environment file (default: ./.env). Can also use APP_ENV_FILE.
-    #[arg(long, value_hint = ValueHint::FilePath, default_value = ".env", env = "APP_ENV_FILE", global = true)]
+    #[arg(long, value_hint = ValueHint::FilePath, default_value = ".env", env = "APP_ENV_FILE", global = true
+    )]
     pub(crate) env_file: PathBuf,
+    /// Maximum number of bytes that can be sent from prover to server
+    #[arg(long, default_value_t = MAX_SENT_DATA)]
+    pub(crate) max_sent_data: usize,
+    /// Maximum number of bytes that can be received by prover from server
+    #[arg(long, default_value_t = MAX_RECV_DATA)]
+    pub(crate) max_recv_data: usize,
 }
 
 #[derive(Args, Debug)]
@@ -98,6 +124,7 @@ pub struct ProveConfig {
     #[builder(default)]
     #[allow(dead_code)]
     pub(crate) privacy_config: PrivacyConfig,
+    pub(crate) notary_config: NotaryConfig,
 }
 
 impl ProveConfig {
@@ -128,8 +155,14 @@ impl ProveConfig {
             .build()
             .context("Failed to build model")?;
 
+        let notary_config = NotaryConfig::builder()
+            .max_sent_data(args.max_sent_data)
+            .max_recv_data(args.max_recv_data)
+            .build()?;
+
         Self::builder()
             .model_config(model_config)
+            .notary_config(notary_config)
             .build()
             .map_err(Into::into)
     }

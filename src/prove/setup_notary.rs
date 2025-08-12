@@ -1,4 +1,4 @@
-use crate::config::ProveConfig;
+use crate::config::{NotaryConfig, ProveConfig};
 use anyhow::{Context, Result};
 use futures::{AsyncRead, AsyncWrite};
 use hyper::client::conn::http1::SendRequest;
@@ -16,11 +16,6 @@ use tokio_util::compat::FuturesAsyncReadCompatExt;
 use tokio_util::compat::TokioAsyncReadCompatExt;
 use tracing::debug;
 
-// Maximum number of bytes that can be sent from prover to server
-const MAX_SENT_DATA: usize = 1 << 12;
-// Maximum number of bytes that can be received by prover from server
-const MAX_RECV_DATA: usize = 1 << 14;
-
 pub(super) async fn setup_connections(
     config: &ProveConfig,
 ) -> Result<(
@@ -33,7 +28,10 @@ pub(super) async fn setup_connections(
         let (prover_socket, notary_socket) = tokio::io::duplex(1 << 16);
 
         // Start a local simple notary service
-        tokio::spawn(use_dummy_notary(notary_socket.compat()));
+        tokio::spawn(use_dummy_notary(
+            config.notary_config,
+            notary_socket.compat(),
+        ));
 
         // A Prover configuration
         let prover_config = ProverConfig::builder()
@@ -43,8 +41,8 @@ pub(super) async fn setup_connections(
                     // We must configure the amount of data we expect to exchange beforehand, which will
                     // be preprocessed prior to the connection. Reducing these limits will improve
                     // performance.
-                    .max_sent_data(1024)
-                    .max_recv_data(4096)
+                    .max_sent_data(config.notary_config.max_sent_data)
+                    .max_recv_data(config.notary_config.max_recv_data)
                     .build()
                     .context("Error building protocol configuration")?,
             )
@@ -62,8 +60,8 @@ pub(super) async fn setup_connections(
         let notary_client: NotaryClient = build_notary_client()?;
         // Send requests for configuration and notarization to the notary server.
         let notarization_request: NotarizationRequest = NotarizationRequest::builder()
-            .max_sent_data(MAX_SENT_DATA)
-            .max_recv_data(MAX_RECV_DATA)
+            .max_sent_data(config.notary_config.max_sent_data)
+            .max_recv_data(config.notary_config.max_recv_data)
             .build()
             .context("Error building notarization request")?;
 
@@ -82,12 +80,11 @@ pub(super) async fn setup_connections(
         // Set up protocol configuration for prover.
         let protocol_config: ProtocolConfig = ProtocolConfig::builder()
             // .max_sent_records(1) // TODO - make sure this is what we want
-            .max_sent_data(MAX_SENT_DATA)
-            // .max_recv_records_online(1) // TODO - make sure this is what we want
+            .max_sent_data(config.notary_config.max_sent_data)
+            .max_recv_data(config.notary_config.max_recv_data) // .max_recv_records_online(1) // TODO - make sure this is what we want
             // .network(
             //     NetworkSetting::Latency, // TODO - make sure this is what we want
             // )
-            .max_recv_data(MAX_RECV_DATA)
             .build()
             .context("Error building protocol configuration")?;
 
@@ -134,6 +131,7 @@ pub(super) async fn setup_connections(
 
 /// Runs a simple Notary with the provided connection to the Prover.
 pub async fn use_dummy_notary<T: AsyncWrite + AsyncRead + Send + Unpin + 'static>(
+    config: NotaryConfig,
     conn: T,
 ) -> Result<()> {
     // Load the notary signing key
@@ -151,8 +149,8 @@ pub async fn use_dummy_notary<T: AsyncWrite + AsyncRead + Send + Unpin + 'static
     // Setup the config. Normally a different ID would be generated
     // for each notarization.
     let config_validator = ProtocolConfigValidator::builder()
-        .max_sent_data(MAX_SENT_DATA)
-        .max_recv_data(MAX_RECV_DATA)
+        .max_sent_data(config.max_sent_data)
+        .max_recv_data(config.max_recv_data)
         .build()
         .context("Failed to build protocol config validator")?;
 
