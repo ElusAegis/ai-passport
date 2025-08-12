@@ -1,10 +1,9 @@
+use crate::args::{ProveArgs, VerifyArgs};
 use crate::config::load_api_domain::load_api_domain;
 use crate::config::load_api_key::load_api_key;
 use crate::config::select_model::select_model_id;
 use crate::config::select_proof_path::select_proof_path;
 use anyhow::{Context, Result};
-use clap::ValueHint;
-use clap::{Args, Subcommand};
 use derive_builder::Builder;
 use std::path::PathBuf;
 
@@ -12,11 +11,6 @@ mod load_api_domain;
 mod load_api_key;
 mod select_model;
 mod select_proof_path;
-
-// Maximum number of bytes that can be sent from prover to server
-const MAX_SENT_DATA: usize = 1 << 10;
-// Maximum number of bytes that can be received by prover from server
-const MAX_RECV_DATA: usize = 1 << 14;
 
 /// Privacy settings including topics to censor in requests and responses
 #[allow(dead_code)]
@@ -78,43 +72,6 @@ impl NotaryConfig {
     pub(crate) fn builder() -> NotaryConfigBuilder {
         NotaryConfigBuilder::default()
     }
-}
-
-#[derive(Subcommand, Debug)]
-pub enum Command {
-    /// Prove model interaction
-    Prove(ProveArgs),
-
-    /// Verify model interaction
-    Verify(VerifyArgs),
-}
-
-#[derive(Args, Debug)]
-pub struct ProveArgs {
-    /// Specify the model to use (optional for proving)
-    #[arg(long)]
-    pub(crate) model_id: Option<String>,
-    /// Path to environment file (default: ./.env). Can also use APP_ENV_FILE.
-    #[arg(long, value_hint = ValueHint::FilePath, default_value = ".env", env = "APP_ENV_FILE", global = true
-    )]
-    pub(crate) env_file: PathBuf,
-    /// Maximum number of bytes that can be sent from prover to server
-    #[arg(long, default_value_t = MAX_SENT_DATA)]
-    pub(crate) max_sent_data: usize,
-    /// Maximum number of bytes that can be received by prover from server
-    #[arg(long, default_value_t = MAX_RECV_DATA)]
-    pub(crate) max_recv_data: usize,
-}
-
-#[derive(Args, Debug)]
-pub struct VerifyArgs {
-    /// Path to the generated proof to verify (optional)
-    #[arg(
-        long,
-        value_hint = ValueHint::FilePath,
-        env = "APP_PROOF_PATH"
-    )]
-    pub(crate) proof_path: Option<String>,
 }
 
 #[derive(Builder)]

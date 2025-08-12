@@ -1,11 +1,13 @@
+mod args;
 mod config;
 mod prove;
 mod verify;
 
+use crate::args::{Cli, Command};
 use crate::config::{ProveConfig, VerifyConfig};
 use crate::prove::run_prove;
 use crate::verify::run_verify;
-pub use config::Command;
+use clap::Parser;
 
 pub enum Application {
     Prove(ProveConfig),
@@ -13,8 +15,10 @@ pub enum Application {
 }
 
 impl Application {
-    pub async fn init(args: Command) -> anyhow::Result<Application> {
-        let application = match args {
+    pub async fn init() -> anyhow::Result<Application> {
+        let cli = Cli::parse();
+
+        let application = match cli.cmd {
             Command::Prove(prove_args) => Application::Prove(ProveConfig::setup(prove_args).await?),
             Command::Verify(verify_args) => Application::Verify(VerifyConfig::setup(verify_args)?),
         };
