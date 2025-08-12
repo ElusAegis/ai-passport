@@ -1,5 +1,5 @@
 use crate::config::VerifyConfig;
-use anyhow::{Context, Result};
+use anyhow::{bail, Context, Result};
 use k256::pkcs8::DecodePublicKey;
 use std::time::Duration;
 use tlsn_core::presentation::{Presentation, PresentationOutput};
@@ -30,9 +30,9 @@ pub(crate) fn run_verify(app_conf: &VerifyConfig) -> Result<()> {
 
     // Check that the key used to sign the attestation is from a Notary we trust.
     if parsed_key != notary_key {
-        return Err(anyhow::anyhow!(
+        bail!(
             "The public key used to sign the attestation does not match the trusted Notary's public key."
-        ));
+        );
     }
 
     let provider = CryptoProvider::default();

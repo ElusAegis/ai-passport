@@ -5,6 +5,7 @@ use crate::config::select_model::select_model_id;
 use crate::config::select_proof_path::select_proof_path;
 use anyhow::{Context, Result};
 use derive_builder::Builder;
+use dialoguer::console::Term;
 use std::path::PathBuf;
 
 mod load_api_domain;
@@ -116,6 +117,17 @@ impl ProveConfig {
             .max_sent_data(args.max_sent_data)
             .max_recv_data(args.max_recv_data)
             .build()?;
+
+        let term = Term::stderr();
+
+        let summary = format!(
+            "{} {} {}\n",
+            dialoguer::console::style("✔").cyan(),
+            dialoguer::console::style("Configuration setup complete").bold(),
+            dialoguer::console::style("✔").cyan(),
+        );
+
+        term.write_line(&summary)?;
 
         Self::builder()
             .model_config(model_config)

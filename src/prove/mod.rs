@@ -16,7 +16,7 @@ use std::str;
 use tracing::debug;
 
 pub(crate) async fn run_prove(app_config: &ProveConfig) -> Result<()> {
-    println!("🔐 Please wait while the system is setup...");
+    println!("⏱️ Please wait while the system is setup...");
 
     let (prover_task, mut request_sender) = setup_connections(app_config).await?;
 

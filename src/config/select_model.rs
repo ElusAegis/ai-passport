@@ -1,5 +1,7 @@
 use crate::config::ModelConfig;
+use crate::utils::spinner::with_spinner_future;
 use anyhow::{Context, Result};
+use dialoguer::console::{style, Term};
 use dialoguer::theme::ColorfulTheme;
 use dialoguer::{FuzzySelect, Input};
 use http_body_util::BodyExt;
@@ -24,36 +26,61 @@ struct ModelList {
 /// Fetches the model list from the API and allows the user to select a model interactively.
 /// Falls back to manual entry if fetching fails.
 pub(crate) async fn select_model_id(api_settings: &ModelConfig) -> Result<String> {
-    let models = fetch_model_list(api_settings).await;
+    let model_list = with_spinner_future(
+        "Waiting to load model list…",
+        fetch_model_list(api_settings),
+    )
+    .await
+    .unwrap_or(vec![]);
 
-    match models {
-        Ok(model_list) if !model_list.is_empty() => {
-            let mut options: Vec<String> = model_list;
-            options.push("Enter custom model ID...".to_string());
+    let term = Term::stderr();
 
-            let selection = FuzzySelect::with_theme(&ColorfulTheme::default())
-                .with_prompt("🤖 Model to interact with (type to filter)")
-                .items(&options)
-                .default(0)
-                .max_length(10)
-                .interact()
-                .context("Failed to get user selection")?;
+    let model_id = if !model_list.is_empty() {
+        prompt_for_model_id_from_list(model_list, &term)?
+    } else {
+        let summary = format!(
+            "{} {}",
+            style("✘").red(),
+            style("Failed to fetch model list from the API.").bold(),
+        );
+        term.write_line(&summary)?;
 
-            let model_id = if options[selection] == "Enter custom model ID..." {
-                prompt_custom_model_id()?
-            } else {
-                options[selection].clone()
-            };
+        prompt_for_manual_model_id(&term)?
+    };
 
-            Ok(model_id)
-        }
-        _ => {
-            println!("❌ Failed to fetch model list from the API.");
-            let model_id = prompt_custom_model_id()?;
-            println!("✔ selected model id: {}", model_id);
-            Ok(model_id)
-        }
-    }
+    let label = "Selected Model ID";
+    let summary = format!(
+        "{} {} · {}",
+        style("✔").green(),
+        style(label).bold(),
+        model_id
+    );
+    term.write_line(&summary)?;
+
+    Ok(model_id)
+}
+
+fn prompt_for_model_id_from_list(model_list: Vec<String>, term: &Term) -> Result<String> {
+    let mut options: Vec<String> = model_list;
+    options.push("Enter model ID manually...".to_string());
+
+    let selection = FuzzySelect::with_theme(&ColorfulTheme::default())
+        .with_prompt("Model to interact with (type to filter)")
+        .items(&options)
+        .default(0)
+        .max_length(10)
+        .interact()
+        .context("Failed to get user selection")?;
+
+    let model_id = if options[selection] == "Enter custom model ID..." {
+        prompt_for_manual_model_id(term)?
+    } else {
+        options[selection].clone()
+    };
+
+    term.clear_last_lines(1)?;
+
+    Ok(model_id)
 }
 
 async fn fetch_model_list(api_settings: &ModelConfig) -> Result<Vec<String>> {
@@ -92,9 +119,9 @@ async fn fetch_model_list(api_settings: &ModelConfig) -> Result<Vec<String>> {
     }
 }
 
-fn prompt_custom_model_id() -> Result<String> {
-    let custom_id = Input::with_theme(&ColorfulTheme::default())
-        .with_prompt("Please enter the model ID you wish to use")
+fn prompt_for_manual_model_id(term: &Term) -> Result<String> {
+    let manual_model_id = Input::with_theme(&ColorfulTheme::default())
+        .with_prompt("Manually enter desired Model ID")
         .with_initial_text("")
         .validate_with(|input: &String| -> Result<(), &str> {
             if input.trim().is_empty() {
@@ -103,8 +130,10 @@ fn prompt_custom_model_id() -> Result<String> {
                 Ok(())
             }
         })
-        .interact()
+        .interact_text_on(&term)
         .context("Failed to read model ID input")?;
 
-    Ok(custom_id)
+    term.clear_last_lines(2)?;
+
+    Ok(manual_model_id)
 }
