@@ -1,5 +1,6 @@
 use anyhow::{Context, Result};
-use inquire::Password;
+use dialoguer::theme::ColorfulTheme;
+use dialoguer::Password;
 use std::env;
 
 const API_KEY_ENV_VAR: &str = "MODEL_API_KEY";
@@ -20,14 +21,17 @@ pub(crate) fn load_api_key() -> Result<String> {
     println!("If you do not have an API key, please obtain one from your Model API provider.");
     println!();
 
-    let api_key = Password::new("Please enter your Model API key:")
-        .without_confirmation()
-        .prompt()
+    let api_key = Password::with_theme(&ColorfulTheme::default())
+        .with_prompt("Please enter your Model API key")
+        .validate_with(|input: &String| -> Result<(), &str> {
+            if input.trim().is_empty() {
+                Err("Model API key cannot be empty")
+            } else {
+                Ok(())
+            }
+        })
+        .interact()
         .context("Failed to read Model API key input")?;
-
-    if api_key.trim().is_empty() {
-        anyhow::bail!("Model API key cannot be empty.");
-    }
 
     Ok(api_key)
 }

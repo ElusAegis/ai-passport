@@ -1,5 +1,6 @@
 use anyhow::{Context, Result};
-use inquire::Text;
+use dialoguer::theme::ColorfulTheme;
+use dialoguer::Input;
 use std::env;
 
 const API_DOMAIN_ENV_VAR: &str = "MODEL_API_DOMAIN";
@@ -34,10 +35,19 @@ pub(crate) fn load_api_domain() -> Result<String> {
         DEFAULT_API_DOMAIN
     );
 
-    let api_domain = Text::new(&prompt)
-        .with_help_message("Do not include `http://` or `https://`. Example: `api.red-pill.ai`")
-        .with_default(DEFAULT_API_DOMAIN)
-        .prompt()
+    let api_domain: String = Input::with_theme(&ColorfulTheme::default())
+        .with_prompt(&prompt)
+        .default(DEFAULT_API_DOMAIN.to_string())
+        .validate_with(|input: &String| -> Result<(), &str> {
+            if input.trim().is_empty() {
+                Err("Model API domain cannot be empty.")
+            } else if input.trim().starts_with("http://") || input.trim().starts_with("https://") {
+                Err("Do not include http:// or https://")
+            } else {
+                Ok(())
+            }
+        })
+        .interact()
         .context("Failed to read Model API domain input")?;
 
     validate_api_domain(&api_domain)

@@ -1,5 +1,7 @@
 use crate::remote::attribution::config::ModelApiSettings;
 use anyhow::{Context, Result};
+use dialoguer::theme::ColorfulTheme;
+use dialoguer::{Input, Select};
 use http_body_util::BodyExt;
 use http_body_util::Empty;
 use hyper::body::Bytes;
@@ -7,7 +9,6 @@ use hyper::Method;
 use hyper_tls::HttpsConnector;
 use hyper_util::client::legacy::Client;
 use hyper_util::rt::TokioExecutor;
-use inquire::{Select, Text};
 use serde::Deserialize;
 
 #[derive(Debug, Deserialize)]
@@ -30,22 +31,27 @@ pub(crate) async fn select_model_id(api_settings: &ModelApiSettings) -> Result<S
             let mut options: Vec<String> = model_list;
             options.push("Enter custom model ID...".to_string());
 
-            let selection = Select::new(
-                "🤖 Please select a model to interact with (scroll or type to search):",
-                options.clone(),
-            )
-            .with_page_size(10)
-            .prompt();
+            let selection = Select::with_theme(&ColorfulTheme::default())
+                .with_prompt("🤖 Model to interact with")
+                .items(&options)
+                .default(0)
+                .max_length(10)
+                .interact()
+                .context("Failed to get user selection")?;
 
-            match selection {
-                Ok(choice) if choice == "Enter custom model ID..." => prompt_custom_model_id(),
-                Ok(choice) => Ok(choice),
-                Err(_) => prompt_custom_model_id(),
-            }
+            let model_id = if options[selection] == "Enter custom model ID..." {
+                prompt_custom_model_id()?
+            } else {
+                options[selection].clone()
+            };
+
+            Ok(model_id)
         }
         _ => {
             println!("❌ Failed to fetch model list from the API.");
-            prompt_custom_model_id()
+            let model_id = prompt_custom_model_id()?;
+            println!("✔ selected model id: {}", model_id);
+            Ok(model_id)
         }
     }
 }
@@ -87,14 +93,18 @@ async fn fetch_model_list(api_settings: &ModelApiSettings) -> Result<Vec<String>
 }
 
 fn prompt_custom_model_id() -> Result<String> {
-    let custom_id = Text::new("Please enter the model ID you wish to use:")
-        .with_help_message(
-            "You can find available model IDs in your provider's documentation or dashboard.",
-        )
-        .prompt()
+    let custom_id = Input::with_theme(&ColorfulTheme::default())
+        .with_prompt("Please enter the model ID you wish to use")
+        .with_initial_text("")
+        .validate_with(|input: &String| -> Result<(), &str> {
+            if input.trim().is_empty() {
+                Err("Model ID cannot be empty")
+            } else {
+                Ok(())
+            }
+        })
+        .interact()
         .context("Failed to read model ID input")?;
-    if custom_id.trim().is_empty() {
-        anyhow::bail!("Model ID cannot be empty.");
-    }
+
     Ok(custom_id)
 }
