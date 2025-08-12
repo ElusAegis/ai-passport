@@ -14,8 +14,6 @@ const DEFAULT_API_DOMAIN: &str = "api.red-pill.ai"; // No default domain
 /// The provided API domain must be compatible with the OpenAI API specification.
 /// Using an incompatible API may result in errors or unexpected behavior.
 pub(crate) fn load_api_domain() -> Result<String> {
-    dotenv::dotenv().ok();
-
     if let Ok(api_domain) = env::var(API_DOMAIN_ENV_VAR) {
         return validate_api_domain(&api_domain);
     }

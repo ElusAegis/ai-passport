@@ -1,4 +1,4 @@
-use crate::remote::attribution::config::ApplicationConfig;
+use crate::config::ProveConfig;
 use anyhow::{Context, Result};
 use futures::{AsyncRead, AsyncWrite};
 use hyper::client::conn::http1::SendRequest;
@@ -22,7 +22,7 @@ const MAX_SENT_DATA: usize = 1 << 12;
 const MAX_RECV_DATA: usize = 1 << 14;
 
 pub(super) async fn setup_connections(
-    config: &ApplicationConfig,
+    config: &ProveConfig,
 ) -> Result<(
     JoinHandle<Result<Prover<state::Committed>, ProverError>>,
     SendRequest<String>,
@@ -37,7 +37,7 @@ pub(super) async fn setup_connections(
 
         // A Prover configuration
         let prover_config = ProverConfig::builder()
-            .server_name(config.model_settings.api_settings.domain.as_str())
+            .server_name(config.model_config.domain.as_str())
             .protocol_config(
                 ProtocolConfig::builder()
                     // We must configure the amount of data we expect to exchange beforehand, which will
@@ -93,7 +93,7 @@ pub(super) async fn setup_connections(
 
         // Configure a new prover with the unique session id returned from notary client.
         let prover_config: ProverConfig = ProverConfig::builder()
-            .server_name(config.model_settings.api_settings.domain.as_str())
+            .server_name(config.model_config.domain.as_str())
             .protocol_config(protocol_config)
             .build()
             .context("Error building prover configuration")?;
@@ -107,10 +107,9 @@ pub(super) async fn setup_connections(
 
     debug!("Prover setup complete!");
     // Open a new socket to the application server.
-    let client_socket =
-        tokio::net::TcpStream::connect((config.model_settings.api_settings.domain.as_str(), 443))
-            .await
-            .context("Error connecting to server")?;
+    let client_socket = tokio::net::TcpStream::connect((config.model_config.domain.as_str(), 443))
+        .await
+        .context("Error connecting to server")?;
 
     // Bind the Prover to server connection
     let (tls_connection, prover_fut) = prover
@@ -138,7 +137,7 @@ pub async fn use_dummy_notary<T: AsyncWrite + AsyncRead + Send + Unpin + 'static
     conn: T,
 ) -> Result<()> {
     // Load the notary signing key
-    let signing_key_str = include_str!("../../../tlsn/notary.key");
+    let signing_key_str = include_str!("../../tlsn/notary.key");
     let signing_key = SecretKey::from_pkcs8_pem(signing_key_str)
         .context("Failed to parse Notary key")?
         .to_bytes();

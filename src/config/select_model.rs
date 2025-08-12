@@ -1,7 +1,7 @@
-use crate::remote::attribution::config::ModelApiSettings;
+use crate::config::ModelConfig;
 use anyhow::{Context, Result};
 use dialoguer::theme::ColorfulTheme;
-use dialoguer::{Input, Select};
+use dialoguer::{FuzzySelect, Input};
 use http_body_util::BodyExt;
 use http_body_util::Empty;
 use hyper::body::Bytes;
@@ -23,7 +23,7 @@ struct ModelList {
 
 /// Fetches the model list from the API and allows the user to select a model interactively.
 /// Falls back to manual entry if fetching fails.
-pub(crate) async fn select_model_id(api_settings: &ModelApiSettings) -> Result<String> {
+pub(crate) async fn select_model_id(api_settings: &ModelConfig) -> Result<String> {
     let models = fetch_model_list(api_settings).await;
 
     match models {
@@ -31,8 +31,8 @@ pub(crate) async fn select_model_id(api_settings: &ModelApiSettings) -> Result<S
             let mut options: Vec<String> = model_list;
             options.push("Enter custom model ID...".to_string());
 
-            let selection = Select::with_theme(&ColorfulTheme::default())
-                .with_prompt("🤖 Model to interact with")
+            let selection = FuzzySelect::with_theme(&ColorfulTheme::default())
+                .with_prompt("🤖 Model to interact with (type to filter)")
                 .items(&options)
                 .default(0)
                 .max_length(10)
@@ -56,7 +56,7 @@ pub(crate) async fn select_model_id(api_settings: &ModelApiSettings) -> Result<S
     }
 }
 
-async fn fetch_model_list(api_settings: &ModelApiSettings) -> Result<Vec<String>> {
+async fn fetch_model_list(api_settings: &ModelConfig) -> Result<Vec<String>> {
     let request = hyper::Request::builder()
         .method(Method::GET)
         .uri(format!(

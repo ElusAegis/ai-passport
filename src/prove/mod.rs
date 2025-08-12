@@ -1,10 +1,9 @@
-mod config;
 mod setup_notary;
 mod tlsn_operations;
 
-use crate::remote::attribution::config::{ApplicationConfig, ModelSettings};
-use crate::remote::attribution::setup_notary::setup_connections;
-use crate::remote::attribution::tlsn_operations::notarise_session;
+use crate::config::{ModelConfig, ProveConfig};
+use crate::prove::setup_notary::setup_connections;
+use crate::prove::tlsn_operations::notarise_session;
 use anyhow::{Context, Result};
 use hyper::client::conn::http1::SendRequest;
 use hyper::header::{AUTHORIZATION, CONNECTION, CONTENT_TYPE, HOST};
@@ -16,23 +15,14 @@ use std::path::PathBuf;
 use std::str;
 use tracing::debug;
 
-pub async fn generate_conversation_attribution() -> anyhow::Result<()> {
-    // Print the rules on how to use the application
-    println!("🌟 Welcome to the Multi-Model Prover CLI! 🌟");
-    println!("This application allows you to interact with various AI models and then generate a cryptographic proof of your conversation.");
+pub(crate) async fn run_prove(app_config: &ProveConfig) -> Result<()> {
+    println!("🔐 Please wait while the system is setup...");
 
-    println!("⚙️ First, you will need to set up your assistant model.");
-    let app_config = ApplicationConfig::setup()
-        .await
-        .context("Error setting up config")?;
-
-    println!("🔐 Next, please wait while the system is setup...");
-
-    let (prover_task, mut request_sender) = setup_connections(&app_config).await?;
+    let (prover_task, mut request_sender) = setup_connections(app_config).await?;
 
     println!(
         "💬 Now, you can engage in a conversation with the `{}` model.",
-        app_config.model_settings.id
+        app_config.model_config.model_id
     );
     println!("The assistant will respond to your messages in real time.");
     println!("📝 When you're done, simply type 'exit' or press `Enter` without typing a message to end the conversation.");
@@ -65,17 +55,17 @@ pub async fn generate_conversation_attribution() -> anyhow::Result<()> {
             .context("Error notarizing the session")?;
 
     // Save the proof to a file
-    let file_path = save_proof_to_file(&notarised_session, &app_config.model_settings.id)?;
+    let file_path = save_proof_to_file(&notarised_session, &app_config.model_config.model_id)?;
 
     println!("✅ Proof successfully saved to `{}`.", file_path.display());
     println!(
-        "\n🔍 You can share this proof or inspect it at: https://explorer.tlsnotary.org/.\n\
+            "\n🔍 You can share this proof or inspect it at: https://explorer.tlsnotary.org/.\n\
         📂 Simply upload the proof, and anyone can verify its authenticity and inspect the details."
-    );
+        );
 
     #[cfg(feature = "dummy-notary")]
     {
-        let public_key = include_str!("../../../tlsn/notary.pub");
+        let public_key = include_str!("../../tlsn/notary.pub");
 
         // Dummy notary is used for testing purposes only
         // It is not secure and should not be used in production
@@ -88,7 +78,7 @@ pub async fn generate_conversation_attribution() -> anyhow::Result<()> {
 
 async fn single_interaction_round(
     request_sender: &mut SendRequest<String>,
-    config: &ApplicationConfig,
+    config: &ProveConfig,
     messages: &mut Vec<serde_json::Value>,
     _recv_private_data: &mut Vec<Vec<u8>>,
     _sent_private_data: &mut Vec<Vec<u8>>,
@@ -120,7 +110,7 @@ async fn single_interaction_round(
 
     // Prepare the Request to send to the model's API
     let request =
-        generate_request(messages, &config.model_settings).context("Error generating request")?;
+        generate_request(messages, &config.model_config).context("Error generating request")?;
 
     debug!("Request: {:?}", request);
 
@@ -171,32 +161,29 @@ async fn single_interaction_round(
 
 fn generate_request(
     messages: &mut Vec<serde_json::Value>,
-    model_settings: &ModelSettings,
+    model_settings: &ModelConfig,
 ) -> Result<hyper::Request<String>> {
     let messages = serde_json::to_value(messages).context("Error serializing messages")?;
     let mut json_body = serde_json::Map::new();
-    json_body.insert("model".to_string(), serde_json::json!(model_settings.id));
+    json_body.insert(
+        "model".to_string(),
+        serde_json::json!(model_settings.model_id),
+    );
     json_body.insert("messages".to_string(), messages);
     let json_body = serde_json::Value::Object(json_body);
 
-    println!(
-        "Inference route: {}",
-        model_settings.api_settings.inference_route
-    );
+    println!("Inference route: {}", model_settings.inference_route);
     println!("Body: {}", json_body);
 
     // Build the HTTP request to send the prompt to Model's API
     hyper::Request::builder()
         .method(Method::POST)
-        .uri(model_settings.api_settings.inference_route.as_str())
-        .header(HOST, model_settings.api_settings.domain.as_str())
+        .uri(model_settings.inference_route.as_str())
+        .header(HOST, model_settings.domain.as_str())
         .header("Accept-Encoding", "identity")
         .header(CONNECTION, "close")
         .header(CONTENT_TYPE, "application/json")
-        .header(
-            AUTHORIZATION,
-            format!("Bearer {}", model_settings.api_settings.api_key),
-        )
+        .header(AUTHORIZATION, format!("Bearer {}", model_settings.api_key))
         .body(json_body.to_string())
         .context("Error building the request")
 }

@@ -10,8 +10,6 @@ const API_KEY_ENV_VAR: &str = "MODEL_API_KEY";
 ///
 /// If you do not have an API key, please obtain one from your Model API provider.
 pub(crate) fn load_api_key() -> Result<String> {
-    dotenv::dotenv().ok();
-
     if let Ok(api_key) = env::var(API_KEY_ENV_VAR) {
         return Ok(api_key);
     }
