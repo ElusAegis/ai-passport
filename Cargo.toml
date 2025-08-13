@@ -33,7 +33,7 @@ k256 = { version = "0.13" }
 hyper = { version = "1.6", features = ["client", "http1"] }
 hyper-util = { version = "0.1", features = ["full"] }
 http-body-util = { version = "0.1" }
-hyper-tls = { version = "0.6" }
+hyper-rustls = { version = "0.27", features = ["http1", "native-tokio"] }
 
 # --- TLSNotary stack ---
 tlsn-core = { git = "https://github.com/tlsnotary/tlsn", tag = "v0.1.0-alpha.12" }

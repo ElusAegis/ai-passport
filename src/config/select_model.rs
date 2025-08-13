@@ -8,7 +8,7 @@ use http_body_util::BodyExt;
 use http_body_util::Empty;
 use hyper::body::Bytes;
 use hyper::Method;
-use hyper_tls::HttpsConnector;
+use hyper_rustls::HttpsConnectorBuilder;
 use hyper_util::client::legacy::Client;
 use hyper_util::rt::TokioExecutor;
 use serde::Deserialize;
@@ -122,13 +122,15 @@ async fn fetch_model_list(api_settings: &ModelConfig) -> Result<Vec<String>> {
         .body(Empty::<Bytes>::new())
         .context("Failed to build request")?;
 
-    let https = HttpsConnector::new();
+    let https = HttpsConnectorBuilder::new()
+        .with_native_roots()? // use OS trust store
+        .https_only() // HTTPS only
+        .enable_http1() // we only enabled http1 in Cargo features
+        .build();
+
     let client = Client::builder(TokioExecutor::new()).build::<_, _>(https);
 
-    let response = client
-        .request(request)
-        .await
-        .context("Failed to send request to API")?;
+    let response = client.request(request).await?;
 
     if response.status().is_success() {
         let body = response
@@ -159,7 +161,7 @@ fn prompt_manual(term: &Term) -> Result<String> {
                 Ok(())
             }
         })
-        .interact_text_on(&term)
+        .interact_text_on(term)
         .context("Failed to read model ID input")?;
 
     term.clear_last_lines(1)?;
