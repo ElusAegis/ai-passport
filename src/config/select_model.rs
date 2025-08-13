@@ -1,6 +1,6 @@
 use crate::config::ModelConfig;
 use crate::utils::spinner::with_spinner_future;
-use anyhow::{Context, Result};
+use anyhow::{Context, Error, Result};
 use dialoguer::console::{style, Term};
 use dialoguer::theme::ColorfulTheme;
 use dialoguer::{FuzzySelect, Input};
@@ -26,41 +26,70 @@ struct ModelList {
 /// Fetches the model list from the API and allows the user to select a model interactively.
 /// Falls back to manual entry if fetching fails.
 pub(crate) async fn select_model_id(api_settings: &ModelConfig) -> Result<String> {
-    let model_list = with_spinner_future(
+    let fetched_model_list = with_spinner_future(
         "Waiting to load model list…",
         fetch_model_list(api_settings),
     )
-    .await
-    .unwrap_or(vec![]);
+    .await;
+
+    // Convert Ok(empty) into an error so we hit the manual fallback path.
+    let fetched_model_list = fetched_model_list.and_then(non_empty);
 
     let term = Term::stderr();
 
-    let model_id = if !model_list.is_empty() {
-        prompt_for_model_id_from_list(model_list, &term)?
-    } else {
-        let summary = format!(
+    let selected = match fetched_model_list {
+        Ok(list) => prompt_from_list(list, &term)?,
+        Err(error) => {
+            let lines_drawn = print_ephemeral_error(error, &term)?;
+
+            let id = prompt_manual(&term)?;
+
+            term.clear_last_lines(lines_drawn)?;
+
+            id
+        }
+    };
+
+    // Our own compact confirmation (no dialoguer report line).
+    term.write_line(&format!(
+        "{} {} {}",
+        style("✔").green().bold(),
+        style("selected model id").bold(),
+        style(format!("· {}", selected)).dim()
+    ))?;
+
+    Ok(selected)
+}
+
+fn print_ephemeral_error(error: Error, term: &Term) -> Result<usize> {
+    let error_message = [
+        format!(
             "{} {}",
             style("✘").red(),
             style("Failed to fetch model list from the API.").bold(),
-        );
-        term.write_line(&summary)?;
-
-        prompt_for_manual_model_id(&term)?
-    };
-
-    let label = "Selected Model ID";
-    let summary = format!(
-        "{} {} · {}",
-        style("✔").green(),
-        style(label).bold(),
-        model_id
-    );
-    term.write_line(&summary)?;
-
-    Ok(model_id)
+        ),
+        format!(
+            "{} {} {}",
+            style(" "),
+            style("The following error occurred:"),
+            style(error).red()
+        ),
+    ];
+    for line in &error_message {
+        term.write_line(line)?;
+    }
+    Ok(error_message.len())
 }
 
-fn prompt_for_model_id_from_list(model_list: Vec<String>, term: &Term) -> Result<String> {
+fn non_empty<T>(v: Vec<T>) -> Result<Vec<T>> {
+    if v.is_empty() {
+        Err(anyhow::anyhow!("Model list is empty"))
+    } else {
+        Ok(v)
+    }
+}
+
+fn prompt_from_list(model_list: Vec<String>, term: &Term) -> Result<String> {
     let mut options: Vec<String> = model_list;
     options.push("Enter model ID manually...".to_string());
 
@@ -73,7 +102,7 @@ fn prompt_for_model_id_from_list(model_list: Vec<String>, term: &Term) -> Result
         .context("Failed to get user selection")?;
 
     let model_id = if options[selection] == "Enter custom model ID..." {
-        prompt_for_manual_model_id(term)?
+        prompt_manual(term)?
     } else {
         options[selection].clone()
     };
@@ -119,7 +148,7 @@ async fn fetch_model_list(api_settings: &ModelConfig) -> Result<Vec<String>> {
     }
 }
 
-fn prompt_for_manual_model_id(term: &Term) -> Result<String> {
+fn prompt_manual(term: &Term) -> Result<String> {
     let manual_model_id = Input::with_theme(&ColorfulTheme::default())
         .with_prompt("Manually enter desired Model ID")
         .with_initial_text("")
@@ -133,7 +162,7 @@ fn prompt_for_manual_model_id(term: &Term) -> Result<String> {
         .interact_text_on(&term)
         .context("Failed to read model ID input")?;
 
-    term.clear_last_lines(2)?;
+    term.clear_last_lines(1)?;
 
     Ok(manual_model_id)
 }
