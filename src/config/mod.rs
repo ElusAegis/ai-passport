@@ -1,6 +1,7 @@
 use crate::args::{ProveArgs, VerifyArgs};
 use crate::config::load_api_domain::load_api_domain;
 use crate::config::load_api_key::load_api_key;
+use crate::config::load_api_port::load_api_port;
 use crate::config::select_model::select_model_id;
 use crate::config::select_proof_path::select_proof_path;
 use anyhow::{Context, Result};
@@ -10,6 +11,7 @@ use std::path::PathBuf;
 
 mod load_api_domain;
 mod load_api_key;
+mod load_api_port;
 mod select_model;
 mod select_proof_path;
 
@@ -41,6 +43,9 @@ impl Default for PrivacyConfig {
 pub(crate) struct ModelConfig {
     /// The domain of the server hosting the model API
     pub(crate) domain: String,
+    /// The port of the server hosting the model API
+    #[builder(setter(into))]
+    pub(crate) port: u16,
     /// The route for inference requests
     #[builder(setter(into), default = "String::from(\"/v1/chat/completions\")")]
     pub(crate) inference_route: String,
@@ -95,10 +100,12 @@ impl ProveConfig {
 
         let api_domain = load_api_domain().context("Failed to load API domain")?;
         let api_key = load_api_key().context("Failed to load API key")?;
+        let api_port = load_api_port().context("Failed to load API port")?;
 
         let mut model_config_builder = ModelConfig::builder()
             .api_key(api_key)
             .domain(api_domain)
+            .port(api_port)
             .clone();
 
         let model_id = match args.model_id {

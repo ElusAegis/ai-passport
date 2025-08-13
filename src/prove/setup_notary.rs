@@ -104,9 +104,12 @@ pub(super) async fn setup_connections(
 
     debug!("Prover setup complete!");
     // Open a new socket to the application server.
-    let client_socket = tokio::net::TcpStream::connect((config.model_config.domain.as_str(), 443))
-        .await
-        .context("Error connecting to server")?;
+    let client_socket = tokio::net::TcpStream::connect((
+        config.model_config.domain.as_str(),
+        config.model_config.port,
+    ))
+    .await
+    .context("Error connecting to server")?;
 
     // Bind the Prover to server connection
     let (tls_connection, prover_fut) = prover

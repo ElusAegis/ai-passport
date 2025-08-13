@@ -116,8 +116,8 @@ async fn fetch_model_list(api_settings: &ModelConfig) -> Result<Vec<String>> {
     let request = hyper::Request::builder()
         .method(Method::GET)
         .uri(format!(
-            "https://{}{}",
-            api_settings.domain, api_settings.model_list_route
+            "https://{}:{}{}",
+            api_settings.domain, api_settings.port, api_settings.model_list_route
         ))
         .body(Empty::<Bytes>::new())
         .context("Failed to build request")?;
