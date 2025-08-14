@@ -79,7 +79,8 @@ pub(super) async fn setup_connections(
 
         // Set up protocol configuration for prover.
         let protocol_config: ProtocolConfig = ProtocolConfig::builder()
-            // .max_sent_records(1) // TODO - make sure this is what we want
+            .max_recv_data_online(config.notary_config.max_recv_data / 2) // TODO: improve this heuristic
+            .defer_decryption_from_start(false)
             .max_sent_data(config.notary_config.max_sent_data)
             .max_recv_data(config.notary_config.max_recv_data) // .max_recv_records_online(1) // TODO - make sure this is what we want
             // .network(
