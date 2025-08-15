@@ -5,6 +5,14 @@ use passport_for_ai::Application;
 async fn main() -> Result<()> {
     tracing_subscriber::fmt::init();
 
+    print_welcome_message();
+
+    let application = Application::init().await?;
+
+    application.run().await
+}
+
+fn print_welcome_message() {
     // Print the rules on how to use the application
     println!();
     println!();
@@ -12,8 +20,4 @@ async fn main() -> Result<()> {
     println!("Create and verify cryptographic proofs of model conversations.");
     println!();
     println!();
-
-    let application = Application::init().await?;
-
-    application.run().await
 }
