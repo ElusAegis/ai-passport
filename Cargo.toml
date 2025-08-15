@@ -51,6 +51,7 @@ tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 # --- Miscellaneous ---
 anyhow = "1.0"
 derive_builder = { version = "0.20.2" }
+hex = "0.4.3"
 
 [features]
 ephemeral-notary = []
