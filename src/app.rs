@@ -11,6 +11,9 @@ pub enum Application {
 
 impl Application {
     pub async fn init() -> anyhow::Result<Application> {
+        // Preload environment variables from .env file if it exists before parsing CLI args
+        dotenvy::dotenv().ok();
+
         let cli = Cli::parse();
 
         let application = match cli.cmd {

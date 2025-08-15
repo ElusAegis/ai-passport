@@ -33,15 +33,7 @@ pub(super) async fn setup(
     SendRequest<String>,
 )> {
     // Set up protocol configuration for prover.
-    let protocol_config: ProtocolConfig = ProtocolConfig::builder()
-        .max_recv_data_online(config.notary_config.max_recv_data) // TODO: consider how to improve with heuristic that we need all requests without the last, so ideally we want `max_recv_data / n * (n-1)`, where `n` is the number of requests
-        .defer_decryption_from_start(false) // TODO - make configurable
-        .max_sent_data(config.notary_config.max_sent_data)
-        .max_recv_data(config.notary_config.max_recv_data)
-        // .network(
-        //     NetworkSetting::Latency, // TODO - make configurable
-        // )
-        .build()
+    let protocol_config = build_protocol_config(&config.notary_config)
         .context("Error building protocol configuration")?;
 
     // Configure a new prover with the unique session id returned from notary client.
@@ -52,7 +44,7 @@ pub(super) async fn setup(
         .context("Error building prover configuration")?;
 
     // Create a new prover and set up the MPC backend.
-    let prover = init_prover(prover_config, config)
+    let prover = init_prover(prover_config, &config.notary_config)
         .await
         .context("Error setting up notary connection for the prover")?;
 
@@ -88,13 +80,13 @@ pub(super) async fn setup(
 
 pub async fn init_prover(
     prover_config: ProverConfig,
-    app_config: &ProveConfig,
+    config: &NotaryConfig,
 ) -> Result<Prover<Setup>> {
     let prover_init = Prover::new(prover_config);
 
     #[cfg(feature = "ephemeral-notary")]
     {
-        let prover_sock = setup_ephemeral_notary(&app_config.notary_config)?;
+        let prover_sock = setup_ephemeral_notary(config)?;
 
         prover_init
             .setup(prover_sock)
@@ -104,12 +96,68 @@ pub async fn init_prover(
 
     #[cfg(not(feature = "ephemeral-notary"))]
     {
-        let prover_sock: NotaryConnection = setup_remote_notary(&app_config.notary_config).await?;
+        let prover_sock: NotaryConnection = setup_remote_notary(config).await?;
 
         prover_init
             .setup(prover_sock.compat())
             .await
             .context("setting up prover with remote notary")
+    }
+}
+
+pub fn build_protocol_config(config: &NotaryConfig) -> Result<ProtocolConfig> {
+    let mut b = ProtocolConfig::builder();
+
+    let (total_sent, total_recv) = get_total_sent_recv_max(config);
+
+    if !config.is_one_shot_mode {
+        let n = config.max_req_num_sent;
+        let rsp = config.max_single_response_size; // We need to prematurely decrypt all responses, but the last one
+        let total_recv_online = rsp * (n - 1);
+
+        b.defer_decryption_from_start(false)
+            .max_recv_data_online(total_recv_online);
+    }
+
+    b.max_sent_data(total_sent)
+        .max_recv_data(total_recv)
+        .network(config.network_optimization)
+        .build()
+        .context("Error building protocol configuration")
+}
+
+pub fn get_total_sent_recv_max(config: &NotaryConfig) -> (usize, usize) {
+    if config.is_one_shot_mode {
+        // --- One‑shot: exact, per‑round sizing --------------------------------
+        //
+        // We create a new protocol instance per request. We already know (or can
+        // compute) precise sizes for this single request/response.
+        // This is done before we invoke the setup.
+        (
+            config.max_single_request_size,
+            config.max_single_response_size,
+        )
+    } else {
+        // --- Multi‑round: stateless model API; sizes grow with history ----------
+        //
+        // Let:
+        //   n   = max number of requests sent to the model API
+        //   rsp = max_single_response_size (upper bound per response)
+        //   req = max_single_request_size (upper bound per request)
+        //
+        // Because each new request re-sends prior context, cumulative *sent*
+        // bytes across the session follow an arithmetic series that simplifies to:
+        //
+        //   total_sent_estimate = (req * (n - 1) * n + rsp * (n - 1) * (n - 2)) / 2
+        let n = config.max_req_num_sent;
+        let req = config.max_single_request_size;
+        let rsp = config.max_single_response_size;
+
+        let total_sent_max = ((req * (n - 1) * n) + rsp * (n - 1) * (n - 2)) / 2;
+
+        let total_recv_max = rsp * n;
+
+        (total_sent_max, total_recv_max)
     }
 }
 
@@ -135,9 +183,11 @@ pub fn setup_ephemeral_notary(
 
     // Setup the config. Normally a different ID would be generated
     // for each notarization.
+    let (total_sent, total_recv) = get_total_sent_recv_max(notary_config);
+
     let config_validator = ProtocolConfigValidator::builder()
-        .max_sent_data(notary_config.max_sent_data)
-        .max_recv_data(notary_config.max_recv_data)
+        .max_sent_data(total_sent)
+        .max_recv_data(total_recv)
         .build()
         .context("Failed to build protocol config validator")?;
 
@@ -170,9 +220,11 @@ pub fn setup_ephemeral_notary(
 async fn setup_remote_notary(notary_config: &NotaryConfig) -> Result<NotaryConnection> {
     let notary_client: NotaryClient = build_notary_client().context("building notary client")?;
 
+    let (total_sent, total_recv) = get_total_sent_recv_max(notary_config);
+
     let req = NotarizationRequest::builder()
-        .max_sent_data(notary_config.max_sent_data)
-        .max_recv_data(notary_config.max_recv_data)
+        .max_sent_data(total_sent)
+        .max_recv_data(total_recv)
         .build()
         .context("building notarization request")?;
 

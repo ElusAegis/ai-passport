@@ -8,6 +8,7 @@ use anyhow::{Context, Result};
 use derive_builder::Builder;
 use dialoguer::console::Term;
 use std::path::PathBuf;
+use tlsn_common::config::NetworkSetting;
 
 mod load_api_domain;
 mod load_api_key;
@@ -68,10 +69,23 @@ impl ModelConfig {
 
 #[derive(Builder, Clone, Copy)]
 pub(crate) struct NotaryConfig {
-    /// Maximum number of bytes that can be sent from prover to server
-    pub(crate) max_sent_data: usize,
-    /// Maximum number of bytes that can be received by prover from server
-    pub(crate) max_recv_data: usize,
+    /// Maximum expected number of requests to send
+    pub(crate) max_req_num_sent: usize,
+    /// Maximum number of bytes in user prompt
+    pub(crate) max_single_request_size: usize,
+    /// Maximum number of bytes in the response
+    pub(crate) max_single_response_size: usize,
+    /// Network optimization strategy
+    #[builder(default)]
+    pub(crate) network_optimization: NetworkSetting,
+    /// Two modes:
+    /// - **One‑shot**: we spin up a fresh protocol instance per request/response pair,
+    ///   so we can size the send/recv budgets exactly from the *current* message sizes.
+    /// - **Multi‑round (default)**: the model API is stateless; every new request must
+    ///   re‑send the whole conversation so far. That makes request sizes grow roughly
+    ///   quadratically with the number of rounds.
+    #[builder(default)]
+    pub(crate) is_one_shot_mode: bool,
 }
 
 impl NotaryConfig {
@@ -85,7 +99,7 @@ impl NotaryConfig {
 pub struct ProveConfig {
     pub(crate) model_config: ModelConfig,
     #[builder(default)]
-    #[allow(dead_code)]
+    #[allow(dead_code)] // TODO - make it useful
     pub(crate) privacy_config: PrivacyConfig,
     pub(crate) notary_config: NotaryConfig,
 }
@@ -121,8 +135,9 @@ impl ProveConfig {
             .context("Failed to build model")?;
 
         let notary_config = NotaryConfig::builder()
-            .max_sent_data(args.max_sent_data)
-            .max_recv_data(args.max_recv_data)
+            .max_req_num_sent(args.max_req_num_sent)
+            .max_single_request_size(args.max_single_request_size)
+            .max_single_response_size(args.max_single_response_size)
             .build()?;
 
         let term = Term::stderr();
