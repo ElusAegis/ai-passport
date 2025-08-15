@@ -1,13 +1,13 @@
-mod model_interactions;
+mod live_interact;
 mod notarise;
 mod setup;
-mod store;
+mod share;
 
 use crate::config::ProveConfig;
-use crate::prove::model_interactions::request_reply_loop;
+use crate::prove::live_interact::request_reply_loop;
 use crate::prove::notarise::notarise_session;
 use crate::prove::setup::setup;
-use crate::prove::store::store_proof_to_file;
+use crate::prove::share::store_interaction_proof_to_file;
 use crate::utils::spinner::with_spinner_future;
 use anyhow::{Context, Result};
 use tracing::debug;
@@ -45,13 +45,18 @@ pub(crate) async fn run_prove(app_config: &ProveConfig) -> Result<()> {
 
     // Notarize the session
     debug!("Notarizing the session...");
-    let (notarised_session, _) =
+    let (attestation, secrets) =
         notarise_session(prover_task.await??, &recv_private_data, &sent_private_data)
             .await
             .context("Error notarizing the session")?;
 
     // Save the proof to a file
-    let file_path = store_proof_to_file(&notarised_session, &app_config.model_config.model_id)?;
+    let file_path = store_interaction_proof_to_file(
+        &attestation,
+        &app_config.privacy_config,
+        &secrets,
+        &app_config.model_config.model_id,
+    )?;
 
     println!("✅ Proof successfully saved to `{}`.", file_path.display());
     println!(

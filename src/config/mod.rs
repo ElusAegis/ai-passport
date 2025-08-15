@@ -99,7 +99,6 @@ impl NotaryConfig {
 pub struct ProveConfig {
     pub(crate) model_config: ModelConfig,
     #[builder(default)]
-    #[allow(dead_code)] // TODO - make it useful
     pub(crate) privacy_config: PrivacyConfig,
     pub(crate) notary_config: NotaryConfig,
 }

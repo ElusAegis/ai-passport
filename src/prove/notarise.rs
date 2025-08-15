@@ -36,14 +36,6 @@ pub(super) async fn notarise_session(
     // Build an attestation request.
     let mut builder = RequestConfig::builder();
 
-    // // Commit to public ranges
-    // builder
-    //     .commit_sent(&RangeSet::from(public_sent_commitment_ids))
-    //     .context("Error committing to public sent ranges")?;
-    // builder
-    //     .commit_recv(&RangeSet::from(public_received_commitment_ids))
-    //     .context("Error committing to public received ranges")?;
-
     builder.transcript_commit(transcript_commit);
 
     let request_config = builder.build()?;
@@ -55,47 +47,3 @@ pub(super) async fn notarise_session(
 
     Ok((attestation, secrets))
 }
-
-// pub(super) fn extract_private_data(
-//     recv_private_data: &mut Vec<Vec<u8>>,
-//     headers: &HeaderMap,
-//     topics_to_censor: &[&str],
-// ) {
-//     for (header_name, header_value) in headers {
-//         if topics_to_censor.contains(&header_name.as_str()) {
-//             let header_value = header_value.as_bytes().to_vec();
-//             if !recv_private_data.contains(&header_value) {
-//                 recv_private_data.push(header_value);
-//             }
-//         }
-//     }
-// }
-
-// fn find_ranges(seq: &[u8], sub_seq: &[&[u8]]) -> (Vec<Range<usize>>, Vec<Range<usize>>) {
-//     let mut private_ranges = Vec::new();
-//     for s in sub_seq {
-//         for (idx, w) in seq.windows(s.len()).enumerate() {
-//             if w == *s {
-//                 private_ranges.push(idx..(idx + w.len()));
-//             }
-//         }
-//     }
-//
-//     let mut sorted_ranges = private_ranges.clone();
-//     sorted_ranges.sort_by_key(|r| r.start);
-//
-//     let mut public_ranges = Vec::new();
-//     let mut last_end = 0;
-//     for r in sorted_ranges {
-//         if r.start > last_end {
-//             public_ranges.push(last_end..r.start);
-//         }
-//         last_end = r.end;
-//     }
-//
-//     if last_end < seq.len() {
-//         public_ranges.push(last_end..seq.len());
-//     }
-//
-//     (public_ranges, private_ranges)
-// }
