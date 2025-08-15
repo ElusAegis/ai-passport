@@ -1,8 +1,8 @@
-mod setup_notary;
+mod setup;
 mod tlsn_operations;
 
 use crate::config::{ModelConfig, ProveConfig};
-use crate::prove::setup_notary::setup_connections;
+use crate::prove::setup::setup;
 use crate::prove::tlsn_operations::notarise_session;
 use crate::utils::spinner::with_spinner_future;
 use anyhow::{Context, Result};
@@ -11,6 +11,7 @@ use hyper::client::conn::http1::SendRequest;
 use hyper::header::{AUTHORIZATION, CONNECTION, CONTENT_LENGTH, CONTENT_TYPE, HOST};
 use hyper::{Method, Request, StatusCode};
 use serde::Serialize;
+use serde_json::Value;
 use std::fs::File;
 use std::io::Write;
 use std::path::PathBuf;
@@ -18,11 +19,8 @@ use std::str;
 use tracing::debug;
 
 pub(crate) async fn run_prove(app_config: &ProveConfig) -> Result<()> {
-    let (prover_task, mut request_sender) = with_spinner_future(
-        "Please wait while the system is setup",
-        setup_connections(app_config),
-    )
-    .await?;
+    let (prover_task, mut request_sender) =
+        with_spinner_future("Please wait while the system is setup", setup(app_config)).await?;
 
     println!(
         "💬 Now, you can engage in a conversation with the `{}` model.",
@@ -40,20 +38,14 @@ pub(crate) async fn run_prove(app_config: &ProveConfig) -> Result<()> {
     let mut recv_private_data = vec![];
     let mut sent_private_data = vec![];
 
-    loop {
-        let stop = single_interaction_round(
-            &mut request_sender,
-            app_config,
-            &mut messages,
-            &mut recv_private_data,
-            &mut sent_private_data,
-        )
-        .await?;
-
-        if stop {
-            break;
-        }
-    }
+    model_interaction(
+        app_config,
+        &mut request_sender,
+        &mut messages,
+        &mut recv_private_data,
+        &mut sent_private_data,
+    )
+    .await?;
 
     println!("🔒 Generating a cryptographic proof of the conversation. Please wait...");
 
@@ -73,9 +65,9 @@ pub(crate) async fn run_prove(app_config: &ProveConfig) -> Result<()> {
         📂 Simply upload the proof, and anyone can verify its authenticity and inspect the details."
         );
 
-    #[cfg(feature = "dummy-notary")]
+    #[cfg(feature = "ephemeral-notary")]
     {
-        let public_key = include_str!("../../tlsn/notary.pub");
+        let public_key = include_str!("../../tlsn/ephemeral_notary.pub");
 
         // Dummy notary is used for testing purposes only
         // It is not secure and should not be used in production
@@ -83,6 +75,30 @@ pub(crate) async fn run_prove(app_config: &ProveConfig) -> Result<()> {
         println!("🚨 WARNING: Dummy notary is used for testing purposes only. It is not secure and should not be used in production.");
     }
 
+    Ok(())
+}
+
+async fn model_interaction(
+    app_config: &ProveConfig,
+    mut request_sender: &mut SendRequest<String>,
+    mut messages: &mut Vec<Value>,
+    mut recv_private_data: &mut Vec<Vec<u8>>,
+    mut sent_private_data: &mut Vec<Vec<u8>>,
+) -> Result<()> {
+    loop {
+        let stop = single_interaction_round(
+            &mut request_sender,
+            app_config,
+            &mut messages,
+            &mut recv_private_data,
+            &mut sent_private_data,
+        )
+        .await?;
+
+        if stop {
+            break;
+        }
+    }
     Ok(())
 }
 

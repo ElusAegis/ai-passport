@@ -55,7 +55,7 @@ log = "0.4.27"
 
 
 [features]
-dummy-notary = []
+ephemeral-notary = []
 
 [[bin]]
 name = "passport-for-ai"

@@ -76,7 +76,7 @@ pub(crate) fn run_verify(app_conf: &VerifyConfig) -> Result<()> {
 
 /// Returns a Notary pubkey trusted by this Verifier
 fn notary_pubkey() -> Result<k256::PublicKey> {
-    let pem_file = include_str!("../tlsn/notary.pub");
+    let pem_file = include_str!("../tlsn/ephemeral_notary.pub");
 
     k256::PublicKey::from_public_key_pem(pem_file).context("Failed to parse notary public key")
 }
