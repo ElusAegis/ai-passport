@@ -2340,7 +2340,6 @@ dependencies = [
  "hyper-util",
  "indicatif",
  "k256",
- "log",
  "notary-client",
  "serde",
  "serde_json",

@@ -51,8 +51,6 @@ tracing-subscriber = { version = "0.3" }
 # --- Miscellaneous ---
 anyhow = "1.0"
 derive_builder = { version = "0.20.2" }
-log = "0.4.27"
-
 
 [features]
 ephemeral-notary = []
