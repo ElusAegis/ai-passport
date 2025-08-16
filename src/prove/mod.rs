@@ -4,7 +4,7 @@ mod setup;
 mod share;
 
 use crate::config::ProveConfig;
-use crate::prove::live_interact::{generate_request, request_reply_loop, send_connection_close};
+use crate::prove::live_interact::{generate_request, request_reply_loop};
 use crate::prove::notarise::notarise_session;
 use crate::prove::setup::setup;
 use crate::prove::share::store_interaction_proof_to_file;
@@ -45,6 +45,10 @@ pub(crate) async fn one_shot_interaction_proving(app_config: &ProveConfig) -> Re
     let cloned_evolving_config = evolving_config.clone();
     let mut current_instance_handle: JoinHandle<Result<ProverWithRequestSender>> =
         tokio::spawn(async move { setup(&cloned_evolving_config).await });
+    let mut cloned_evolving_config = evolving_config.clone();
+    cloned_evolving_config.notary_config.max_single_request_size +=
+        app_config.notary_config.max_single_request_size
+            + app_config.notary_config.max_single_response_size;
     let mut future_instance_handle: JoinHandle<Result<ProverWithRequestSender>>;
 
     let mut messages: Vec<Value> = vec![];
@@ -66,21 +70,6 @@ pub(crate) async fn one_shot_interaction_proving(app_config: &ProveConfig) -> Re
 
         // ---- 2) Exit path: send lean close-request and stop ---------------------
         if user_input.is_empty() || user_input.eq_ignore_ascii_case("exit") {
-            let mut current_instance = current_instance_handle.await??;
-            send_connection_close(&mut current_instance.1, &app_config.model_config)
-                .await
-                .context("failed to send close request")?;
-
-            // current_instance = if let Some(future_instance_handle) = future_instance_handle {
-            //     future_instance_handle.await??
-            // } else {
-            //     current_instance
-            // };
-            //
-            // send_connection_close(&mut current_instance.1, &app_config.model_config)
-            //     .await
-            //     .context("failed to send close request")?;
-
             break;
         }
 
@@ -88,19 +77,26 @@ pub(crate) async fn one_shot_interaction_proving(app_config: &ProveConfig) -> Re
 
         // ---- 2.1) Prepare the next prover instance -----------------------------
 
-        evolving_config.notary_config.max_single_request_size =
-            app_config.notary_config.max_single_request_size
-                + app_config.notary_config.max_single_response_size;
+        let encoded_messages =
+            serde_json::to_string(&messages).context("Failed to encode messages to JSON")?;
+        let message_byte_size = encoded_messages.len();
+        debug!("Total message array byte size: {}", message_byte_size);
+        evolving_config.notary_config.max_single_request_size = message_byte_size
+            + app_config.notary_config.max_single_request_size
+            + app_config.notary_config.max_single_response_size;
 
         let cloned_evolving_config = evolving_config.clone();
 
         future_instance_handle = tokio::spawn(async move { setup(&cloned_evolving_config).await });
 
         // ---- 3) Normal request path ---------------------------------------------
-        messages.push(serde_json::json!({
+        let new_user_message = serde_json::json!({
             "role": "user",
             "content": user_input
-        }));
+        });
+        let user_message_byte_size = new_user_message.to_string().len();
+        debug!("User message byte size: {}", user_message_byte_size);
+        messages.push(new_user_message);
 
         let request = generate_request(&messages, &app_config.model_config, true)
             .context("Error generating request")?;
@@ -151,6 +147,12 @@ pub(crate) async fn one_shot_interaction_proving(app_config: &ProveConfig) -> Re
                         "role": "assistant",
                         "content": string_value
                     });
+                    let received_assistant_message_byte_size =
+                        received_assistant_message.to_string().len();
+                    debug!(
+                        "Received assistant message byte size: {}",
+                        received_assistant_message_byte_size
+                    );
                     messages.push(received_assistant_message);
                 }
                 _ => {
