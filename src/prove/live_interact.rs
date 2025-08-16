@@ -1,5 +1,7 @@
 use crate::config::{ModelConfig, ProveConfig};
+use crate::utils::spinner::with_spinner_future;
 use anyhow::Context;
+use anyhow::Result;
 use http_body_util::BodyExt;
 use hyper::client::conn::http1::SendRequest;
 use hyper::header::{
@@ -57,8 +59,6 @@ pub(super) async fn single_interaction_round(
         return Ok(true);
     }
 
-    println!("processing...");
-
     // ---- 3) Normal request path ---------------------------------------------
     messages.push(serde_json::json!({
         "role": "user",
@@ -75,6 +75,23 @@ pub(super) async fn single_interaction_round(
     debug!("Request: {:?}", request);
     debug!("Sending request to Model's API...");
 
+    let received_assistant_message: Value =
+        with_spinner_future("processing...", get_response(request_sender, request)).await?;
+
+    println!(
+        "\n🤖 Assistant's response:\n\n{}\n",
+        received_assistant_message
+    );
+    messages.push(received_assistant_message);
+
+    // Tell caller to continue the loop.
+    Ok(false)
+}
+
+async fn get_response(
+    request_sender: &mut SendRequest<String>,
+    request: Request<String>,
+) -> Result<Value> {
     let response = request_sender
         .send_request(request)
         .await
@@ -102,15 +119,7 @@ pub(super) async fn single_interaction_round(
     );
 
     let received_assistant_message = serde_json::json!({"role": "assistant", "content": parsed["choices"][0]["message"]["content"]});
-    messages.push(received_assistant_message);
-
-    println!(
-        "\n🤖 Assistant's response:\n\n{}\n",
-        parsed["choices"][0]["message"]["content"]
-    );
-
-    // Tell caller to continue the loop.
-    Ok(false)
+    Ok(received_assistant_message)
 }
 
 /// Build and send a minimal empty request that politely asks the server
