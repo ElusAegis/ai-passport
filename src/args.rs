@@ -96,7 +96,7 @@ pub(crate) struct ProveArgs {
     pub(crate) session_mode: SessionMode,
 }
 
-pub fn parse_network_setting(s: &str) -> Result<NetworkSetting, String> {
+fn parse_network_setting(s: &str) -> Result<NetworkSetting, String> {
     match s.trim().to_ascii_lowercase().as_str() {
         // primary names
         "latency" => Ok(NetworkSetting::Latency),
@@ -112,7 +112,7 @@ pub fn parse_network_setting(s: &str) -> Result<NetworkSetting, String> {
     }
 }
 
-pub fn parse_session_mode(s: &str) -> Result<SessionMode, String> {
+fn parse_session_mode(s: &str) -> Result<SessionMode, String> {
     match s.trim().to_ascii_lowercase().as_str() {
         "one-shot" | "oneshot" | "one_shot" => Ok(SessionMode::OneShot),
         "multi-round" | "multiround" | "multi_round" | "multi" => Ok(SessionMode::MultiRound),
