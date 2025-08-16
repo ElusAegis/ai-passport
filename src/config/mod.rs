@@ -1,4 +1,4 @@
-use crate::args::{ProveArgs, VerifyArgs};
+use crate::args::{ProveArgs, SessionMode, VerifyArgs};
 use crate::config::load_api_domain::load_api_domain;
 use crate::config::load_api_key::load_api_key;
 use crate::config::load_api_port::load_api_port;
@@ -17,7 +17,7 @@ mod select_model;
 mod select_proof_path;
 
 /// Privacy settings including topics to censor in requests and responses
-#[allow(dead_code)]
+#[derive(Builder, Clone)]
 pub(crate) struct PrivacyConfig {
     pub(crate) request_topics_to_censor: &'static [&'static str],
     pub(crate) response_topics_to_censor: &'static [&'static str],
@@ -40,7 +40,7 @@ impl Default for PrivacyConfig {
     }
 }
 
-#[derive(Builder)]
+#[derive(Builder, Clone)]
 pub(crate) struct ModelConfig {
     /// The domain of the server hosting the model API
     pub(crate) domain: String,
@@ -94,7 +94,7 @@ impl NotaryConfig {
     }
 }
 
-#[derive(Builder)]
+#[derive(Builder, Clone)]
 #[builder(pattern = "owned")]
 pub struct ProveConfig {
     pub(crate) model_config: ModelConfig,
@@ -137,6 +137,8 @@ impl ProveConfig {
             .max_req_num_sent(args.max_req_num_sent)
             .max_single_request_size(args.max_single_request_size)
             .max_single_response_size(args.max_single_response_size)
+            .is_one_shot_mode(matches!(args.session_mode, SessionMode::OneShot))
+            .network_optimization(args.network_optimization)
             .build()?;
 
         let term = Term::stderr();

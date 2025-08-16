@@ -9,6 +9,7 @@ use tlsn_core::{CryptoProvider, Secrets};
 use tlsn_formats::http::HttpTranscript;
 
 pub(super) fn store_interaction_proof_to_file(
+    postfix: &str,
     attestation: &Attestation,
     privacy_config: &PrivacyConfig,
     secrets: &Secrets,
@@ -86,8 +87,8 @@ pub(super) fn store_interaction_proof_to_file(
     // Create file path
     let sanitised_model_id = model_id.replace(" ", "_").replace("/", "_");
     let file_path = format!(
-        "{}_{}_conversation_proof.json",
-        sanitised_model_id, timestamp
+        "{}_{}_{}_interaction_proof.json",
+        sanitised_model_id, timestamp, postfix
     );
     let path_buf = PathBuf::from(&file_path);
 

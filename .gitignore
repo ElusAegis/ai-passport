@@ -3,5 +3,5 @@
 /model/*.json
 !/model/input.json
 /.env
-/*_conversation_proof.json
+/*_interaction_proof.json
 

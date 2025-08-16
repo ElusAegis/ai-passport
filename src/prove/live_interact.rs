@@ -2,7 +2,9 @@ use crate::config::{ModelConfig, ProveConfig};
 use anyhow::Context;
 use http_body_util::BodyExt;
 use hyper::client::conn::http1::SendRequest;
-use hyper::header::{AUTHORIZATION, CONNECTION, CONTENT_LENGTH, CONTENT_TYPE, HOST};
+use hyper::header::{
+    ACCEPT_ENCODING, AUTHORIZATION, CONNECTION, CONTENT_LENGTH, CONTENT_TYPE, HOST,
+};
 use hyper::{Method, Request, StatusCode};
 use serde_json::Value;
 use std::io::Write;
@@ -12,18 +14,9 @@ pub(super) async fn request_reply_loop(
     app_config: &ProveConfig,
     mut request_sender: &mut SendRequest<String>,
     mut messages: &mut Vec<Value>,
-    mut recv_private_data: &mut Vec<Vec<u8>>,
-    mut sent_private_data: &mut Vec<Vec<u8>>,
 ) -> anyhow::Result<()> {
     loop {
-        let stop = single_interaction_round(
-            &mut request_sender,
-            app_config,
-            &mut messages,
-            &mut recv_private_data,
-            &mut sent_private_data,
-        )
-        .await?;
+        let stop = single_interaction_round(&mut request_sender, app_config, &mut messages).await?;
 
         if stop {
             break;
@@ -39,8 +32,6 @@ async fn single_interaction_round(
     request_sender: &mut SendRequest<String>,
     config: &ProveConfig,
     messages: &mut Vec<Value>,
-    _recv_private_data: &mut Vec<Vec<u8>>,
-    _sent_private_data: &mut Vec<Vec<u8>>,
 ) -> anyhow::Result<bool> {
     // ---- 1) Read user input -------------------------------------------------
     println!("\n💬 Your message\n(type 'exit' to end): ");
@@ -73,8 +64,8 @@ async fn single_interaction_round(
         "content": user_input
     }));
 
-    let request =
-        generate_request(messages, &config.model_config).context("Error generating request")?;
+    let request = generate_request(messages, &config.model_config, false)
+        .context("Error generating request")?;
 
     debug!("Request: {:?}", request);
     debug!("Sending request to Model's API...");
@@ -120,7 +111,7 @@ async fn single_interaction_round(
 /// Build and send a minimal empty request that politely asks the server
 /// to close the HTTP/1.1 connection after the response.
 /// We do NOT read the body; we just send and return.
-async fn send_connection_close(
+pub(crate) async fn send_connection_close(
     request_sender: &mut SendRequest<String>,
     model_settings: &ModelConfig,
 ) -> anyhow::Result<()> {
@@ -141,9 +132,10 @@ async fn send_connection_close(
     Ok(())
 }
 
-fn generate_request(
-    messages: &mut Vec<Value>,
+pub(crate) fn generate_request(
+    messages: &Vec<Value>,
     model_settings: &ModelConfig,
+    close_connection: bool,
 ) -> anyhow::Result<Request<String>> {
     let messages_val = serde_json::to_value(messages).context("Error serializing messages")?;
 
@@ -159,7 +151,15 @@ fn generate_request(
         .method(Method::POST)
         .uri(model_settings.inference_route.as_str())
         .header(HOST, model_settings.domain.as_str())
-        .header("Accept-Encoding", "identity")
+        .header(ACCEPT_ENCODING, "identity")
+        .header(
+            CONNECTION,
+            if close_connection {
+                "close"
+            } else {
+                "keep-alive"
+            },
+        )
         .header(CONTENT_TYPE, "application/json")
         .header(AUTHORIZATION, format!("Bearer {}", model_settings.api_key))
         .body(json_body.to_string())

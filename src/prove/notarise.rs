@@ -10,8 +10,6 @@ use tracing::debug;
 
 pub(super) async fn notarise_session(
     mut prover: Prover<state::Committed>,
-    _recv_private_data: &[Vec<u8>],
-    _sent_private_data: &[Vec<u8>],
 ) -> Result<(Attestation, Secrets)> {
     // Parse the HTTP transcript.
     let transcript = HttpTranscript::parse(prover.transcript())?;
