@@ -64,15 +64,5 @@ pub(crate) async fn run_prove(app_config: &ProveConfig) -> Result<()> {
         📂 Simply upload the proof, and anyone can verify its authenticity and inspect the details."
         );
 
-    #[cfg(feature = "ephemeral-notary")]
-    {
-        let public_key = include_str!("../../tlsn/ephemeral_notary.pub");
-
-        // Dummy notary is used for testing purposes only
-        // It is not secure and should not be used in production
-        println!("🚨 PUBLIC KEY: \n{}", public_key);
-        println!("🚨 WARNING: Dummy notary is used for testing purposes only. It is not secure and should not be used in production.");
-    }
-
     Ok(())
 }
