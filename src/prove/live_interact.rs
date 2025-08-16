@@ -28,7 +28,7 @@ pub(super) async fn request_reply_loop(
 /// Return value convention:
 /// - Ok(true)  => stop interaction loop
 /// - Ok(false) => continue interaction loop
-async fn single_interaction_round(
+pub(super) async fn single_interaction_round(
     request_sender: &mut SendRequest<String>,
     config: &ProveConfig,
     messages: &mut Vec<Value>,
@@ -48,10 +48,11 @@ async fn single_interaction_round(
 
     // ---- 2) Exit path: send lean close-request and stop ---------------------
     if user_input.is_empty() || user_input.eq_ignore_ascii_case("exit") {
-        send_connection_close(request_sender, &config.model_config)
-            .await
-            .context("failed to send close request")?;
-
+        if !config.notary_config.is_one_shot_mode {
+            send_connection_close(request_sender, &config.model_config)
+                .await
+                .context("failed to send close request")?;
+        }
         // We’re done: tell the caller to stop the loop.
         return Ok(true);
     }
@@ -64,8 +65,12 @@ async fn single_interaction_round(
         "content": user_input
     }));
 
-    let request = generate_request(messages, &config.model_config, false)
-        .context("Error generating request")?;
+    let request = generate_request(
+        messages,
+        &config.model_config,
+        config.notary_config.is_one_shot_mode,
+    )
+    .context("Error generating request")?;
 
     debug!("Request: {:?}", request);
     debug!("Sending request to Model's API...");

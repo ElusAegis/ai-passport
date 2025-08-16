@@ -4,20 +4,14 @@ mod setup;
 mod share;
 
 use crate::config::ProveConfig;
-use crate::prove::live_interact::{generate_request, request_reply_loop};
+use crate::prove::live_interact::{request_reply_loop, single_interaction_round};
 use crate::prove::notarise::notarise_session;
 use crate::prove::setup::setup;
 use crate::prove::share::store_interaction_proof_to_file;
 use crate::utils::spinner::with_spinner_future;
 use anyhow::{Context, Result};
 use hyper::client::conn::http1::SendRequest;
-use hyper::StatusCode;
 use serde_json::Value;
-use spansy::http::BodyContent;
-use spansy::json::JsonValue;
-use spansy::Spanned;
-use std::io::Write;
-use tlsn_formats::http::HttpTranscript;
 use tlsn_prover::{state, Prover, ProverError};
 use tokio::task::JoinHandle;
 use tracing::debug;
@@ -40,79 +34,27 @@ pub(crate) async fn one_shot_interaction_proving(app_config: &ProveConfig) -> Re
     let _total_recv = 0;
     const _PREPARE_IN_ADVANCE: usize = 3; // TODO - consider turning this into a config option
 
-    let mut evolving_config = app_config.clone();
-
-    let cloned_evolving_config = evolving_config.clone();
+    let cloned_app_config = app_config.clone();
     let mut current_instance_handle: JoinHandle<Result<ProverWithRequestSender>> =
-        tokio::spawn(async move { setup(&cloned_evolving_config).await });
-    let mut cloned_evolving_config = evolving_config.clone();
-    cloned_evolving_config.notary_config.max_single_request_size +=
+        tokio::spawn(async move { setup(&cloned_app_config).await });
+    let mut cloned_app_config = app_config.clone();
+    cloned_app_config.notary_config.max_single_request_size +=
         app_config.notary_config.max_single_request_size
             + app_config.notary_config.max_single_response_size;
-    let mut future_instance_handle: JoinHandle<Result<ProverWithRequestSender>>;
+    let mut future_instance_handle: JoinHandle<Result<ProverWithRequestSender>> =
+        tokio::spawn(async move { setup(&cloned_app_config).await });
 
     let mut messages: Vec<Value> = vec![];
     let mut counter = 0;
 
     loop {
-        // ---- 1) Read user input -------------------------------------------------
-        println!("\n💬 Your message\n(type 'exit' to end): ");
-        print!("> ");
-        std::io::stdout()
-            .flush()
-            .context("Failed to flush stdout")?;
-
-        let mut user_input = String::new();
-        std::io::stdin()
-            .read_line(&mut user_input)
-            .context("Failed to read user input to the model")?;
-        let user_input = user_input.trim();
-
-        // ---- 2) Exit path: send lean close-request and stop ---------------------
-        if user_input.is_empty() || user_input.eq_ignore_ascii_case("exit") {
-            break;
-        }
-
-        println!("processing...");
-
-        // ---- 2.1) Prepare the next prover instance -----------------------------
-
-        let encoded_messages =
-            serde_json::to_string(&messages).context("Failed to encode messages to JSON")?;
-        let message_byte_size = encoded_messages.len();
-        debug!("Total message array byte size: {}", message_byte_size);
-        evolving_config.notary_config.max_single_request_size = message_byte_size
-            + app_config.notary_config.max_single_request_size
-            + app_config.notary_config.max_single_response_size;
-
-        let cloned_evolving_config = evolving_config.clone();
-
-        future_instance_handle = tokio::spawn(async move { setup(&cloned_evolving_config).await });
-
-        // ---- 3) Normal request path ---------------------------------------------
-        let new_user_message = serde_json::json!({
-            "role": "user",
-            "content": user_input
-        });
-        let user_message_byte_size = new_user_message.to_string().len();
-        debug!("User message byte size: {}", user_message_byte_size);
-        messages.push(new_user_message);
-
-        let request = generate_request(&messages, &app_config.model_config, true)
-            .context("Error generating request")?;
-
         let mut current_instance = current_instance_handle.await??;
 
-        let response = current_instance
-            .1
-            .send_request(request)
-            .await
-            .context("Request failed")?;
+        let stop =
+            single_interaction_round(&mut current_instance.1, app_config, &mut messages).await?;
 
-        debug!("Received response from Model: {:?}", response.status());
-
-        if response.status() != StatusCode::OK {
-            anyhow::bail!("Request failed with status: {}", response.status());
+        if stop {
+            break;
         }
 
         // Notarize the session
@@ -130,44 +72,17 @@ pub(crate) async fn one_shot_interaction_proving(app_config: &ProveConfig) -> Re
             &app_config.model_config.model_id,
         )?;
 
-        let transcript = HttpTranscript::parse(secrets.transcript())?;
-        let body: BodyContent = transcript.responses[0]
-            .body
-            .as_ref()
-            .unwrap()
-            .content
-            .clone();
-
-        match body {
-            BodyContent::Json(json) => match json.get("choices.0.message.content").unwrap() {
-                JsonValue::String(value) => {
-                    let string_value = value.span().as_str();
-                    println!("\n🤖 Assistant's response:\n\n{}\n", string_value);
-                    let received_assistant_message = serde_json::json!({
-                        "role": "assistant",
-                        "content": string_value
-                    });
-                    let received_assistant_message_byte_size =
-                        received_assistant_message.to_string().len();
-                    debug!(
-                        "Received assistant message byte size: {}",
-                        received_assistant_message_byte_size
-                    );
-                    messages.push(received_assistant_message);
-                }
-                _ => {
-                    anyhow::bail!("Received response body is not in expected JSON format");
-                }
-            },
-            BodyContent::Unknown(_) => {
-                anyhow::bail!("Received response body is not in JSON format");
-            }
-            _ => {
-                anyhow::bail!("Received response body is not in JSON format");
-            }
-        }
-
         current_instance_handle = future_instance_handle;
+
+        let mut cloned_app_config = app_config.clone();
+        let encoded_messages =
+            serde_json::to_string(&messages).context("Failed to encode messages to JSON")?;
+        let message_byte_size = encoded_messages.len();
+        cloned_app_config.notary_config.max_single_request_size = message_byte_size
+            + app_config.notary_config.max_single_request_size
+            + app_config.notary_config.max_single_response_size;
+        future_instance_handle = tokio::spawn(async move { setup(&cloned_app_config).await });
+
         counter += 1;
     }
 
