@@ -111,10 +111,9 @@ measure_latency_h1() {
         max_app="$app_rtt"
         first_sample=0
       else
-        awk -v a="${app_rtt}" -v m="${min_app}" 'BEGIN{if(a<m) print a; else print m}' >/tmp/min.$$
-        min_app="$(cat /tmp/min.$$)"; rm -f /tmp/min.$$
-        awk -v a="${app_rtt}" -v m="${max_app}" 'BEGIN{if(a>m) print a; else print m}' >/tmp/max.$$
-        max_app="$(cat /tmp/max.$$)"; rm -f /tmp/max.$$
+        # in-variable min/max update (no temp files)
+        min_app="$(awk -v a="${app_rtt}" -v m="${min_app}" 'BEGIN{if(a<m) print a; else print m}')"
+        max_app="$(awk -v a="${app_rtt}" -v m="${max_app}" 'BEGIN{if(a>m) print a; else print m}')"
       fi
     fi
 
