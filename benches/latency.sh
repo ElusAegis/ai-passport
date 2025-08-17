@@ -2,7 +2,7 @@
 set -euo pipefail
 
 # --- Defaults ---
-SAMPLES=10   # number of measured runs (after warmup)
+SAMPLES=10   # measured runs (after warmup)
 WARMUP=1     # warmup runs to discard
 
 usage() {
@@ -10,7 +10,7 @@ usage() {
 Usage:
   $0 [options] <TARGET_URL> <NOTARY_URL>
 
-Positional:
+Positional (optional if provided via .env):
   TARGET_URL     Fully qualified URL (e.g., https://api.example.com/health)
   NOTARY_URL     Fully qualified URL (e.g., https://notary.pse.dev/)
 
@@ -19,14 +19,35 @@ Options:
   -w, --warmup N        Warm-up runs to discard (default: ${WARMUP})
   -h, --help            Show help
 
-Example:
+Notes:
+  • If a .env file is present with TARGET_URL and NOTARY_URL, the script will load them.
+  • Command-line arguments override .env values.
+
+Examples:
   $0 -n 20 https://example.com/ https://notary.pse.dev/
+  $0                     # if .env provides TARGET_URL and NOTARY_URL
 EOF
 }
 
-# --- Parse args ---
-if [ "$#" -lt 2 ]; then usage; exit 1; fi
+# --- Read .env if present (optional) ---
+TARGET_URL_ENV=""
+NOTARY_URL_ENV=""
+if [ -f .env ]; then
+  # export all assignments while sourcing, then disable
+  set -a
+  # shellcheck disable=SC1091
+  . ./.env
+  set +a
+  TARGET_URL_ENV="${TARGET_URL:-}"
+  NOTARY_URL_ENV="${NOTARY_URL:-}"
+  if [ -n "${TARGET_URL_ENV}" ] || [ -n "${NOTARY_URL_ENV}" ]; then
+    echo "ℹ️  Loaded .env (optional): detected TARGET_URL='${TARGET_URL_ENV:-unset}', NOTARY_URL='${NOTARY_URL_ENV:-unset}'."
+  else
+    echo "ℹ️  .env present but TARGET_URL / NOTARY_URL not set; falling back to CLI args."
+  fi
+fi
 
+# --- Parse args ---
 OPTS=()
 while [[ "$#" -gt 0 ]]; do
   case "$1" in
@@ -38,9 +59,24 @@ while [[ "$#" -gt 0 ]]; do
   esac
 done
 
-if [ "${#OPTS[@]}" -lt 2 ]; then usage; exit 1; fi
-TARGET_URL="${OPTS[0]}"
-NOTARY_URL="${OPTS[1]}"
+# Determine URLs with precedence: CLI args > .env
+TARGET_URL=""
+NOTARY_URL=""
+if [ "${#OPTS[@]}" -ge 2 ]; then
+  TARGET_URL="${OPTS[0]}"
+  NOTARY_URL="${OPTS[1]}"
+  echo "ℹ️  Using URLs from arguments (overrides .env if set)."
+else
+  TARGET_URL="${TARGET_URL_ENV:-}"
+  NOTARY_URL="${NOTARY_URL_ENV:-}"
+fi
+
+# Validate presence
+if [ -z "${TARGET_URL}" ] || [ -z "${NOTARY_URL}" ]; then
+  echo "❌ Need both TARGET_URL and NOTARY_URL (via args or .env)."
+  usage
+  exit 1
+fi
 
 # --- Helpers ---
 fmt_ms() { awk 'BEGIN{printf "%.2f", ARGV[1]*1000}' "$1"; }
