@@ -18,7 +18,7 @@ mod select_proof_path;
 
 /// Privacy settings including topics to censor in requests and responses
 #[derive(Builder, Clone)]
-pub(crate) struct PrivacyConfig {
+pub struct PrivacyConfig {
     pub(crate) request_topics_to_censor: &'static [&'static str],
     pub(crate) response_topics_to_censor: &'static [&'static str],
 }
@@ -41,7 +41,7 @@ impl Default for PrivacyConfig {
 }
 
 #[derive(Builder, Clone)]
-pub(crate) struct ModelConfig {
+pub struct ModelConfig {
     /// The domain of the server hosting the model API
     pub(crate) domain: String,
     /// The port of the server hosting the model API
@@ -62,13 +62,13 @@ pub(crate) struct ModelConfig {
 }
 
 impl ModelConfig {
-    pub(crate) fn builder() -> ModelConfigBuilder {
+    pub fn builder() -> ModelConfigBuilder {
         ModelConfigBuilder::default()
     }
 }
 
 #[derive(Builder, Clone, Copy)]
-pub(crate) struct NotaryConfig {
+pub struct NotaryConfig {
     /// Maximum expected number of requests to send
     pub(crate) max_req_num_sent: usize,
     /// Maximum number of bytes in user prompt
@@ -89,7 +89,7 @@ pub(crate) struct NotaryConfig {
 }
 
 impl NotaryConfig {
-    pub(crate) fn builder() -> NotaryConfigBuilder {
+    pub fn builder() -> NotaryConfigBuilder {
         NotaryConfigBuilder::default()
     }
 }
@@ -104,7 +104,7 @@ pub struct ProveConfig {
 }
 
 impl ProveConfig {
-    pub(crate) fn builder() -> ProveConfigBuilder {
+    pub fn builder() -> ProveConfigBuilder {
         ProveConfigBuilder::default()
     }
 

@@ -9,7 +9,7 @@ tokio::task_local! {
 }
 
 // 3) Helper to run a future with an injected source
-pub(crate) async fn with_input_source<S, F, R>(src: S, fut: F) -> R
+pub async fn with_input_source<S, F, R>(src: S, fut: F) -> R
 where
     S: InputSource,
     F: std::future::Future<Output = R>,
