@@ -1,6 +1,7 @@
 use crate::args::{Cli, Command};
 use crate::config::{ProveConfig, VerifyConfig};
 use crate::prove::run_prove;
+use crate::utils::io_input::{with_input_source, StdinInputSource};
 use crate::verify::run_verify;
 use clap::Parser;
 
@@ -26,7 +27,9 @@ impl Application {
 
     pub async fn run(&self) -> anyhow::Result<()> {
         match self {
-            Self::Prove(prove_conf) => run_prove(prove_conf).await,
+            Self::Prove(prove_conf) => {
+                with_input_source(StdinInputSource {}, async { run_prove(prove_conf).await }).await
+            }
             Self::Verify(verify_conf) => run_verify(verify_conf),
         }
     }

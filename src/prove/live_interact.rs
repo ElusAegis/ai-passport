@@ -1,4 +1,5 @@
 use crate::config::{ModelConfig, ProveConfig};
+use crate::utils::io_input::try_read_user_input_from_ctx;
 use crate::utils::spinner::with_spinner_future;
 use anyhow::Context;
 use anyhow::Result;
@@ -9,7 +10,6 @@ use hyper::header::{
 };
 use hyper::{Method, Request, StatusCode};
 use serde_json::Value;
-use std::io::Write;
 use tracing::debug;
 
 pub(super) async fn request_reply_loop(
@@ -36,28 +36,19 @@ pub(super) async fn single_interaction_round(
     messages: &mut Vec<Value>,
 ) -> anyhow::Result<bool> {
     // ---- 1) Read user input -------------------------------------------------
-    println!("\n💬 Your message\n(type 'exit' to end): ");
-    print!("> ");
-    std::io::stdout()
-        .flush()
-        .context("Failed to flush stdout")?;
+    // Prefer using context; fall back to stdin if absent.
+    let maybe_line: Option<String> =
+        try_read_user_input_from_ctx().context("failed to read user input")??;
 
-    let mut user_input = String::new();
-    std::io::stdin()
-        .read_line(&mut user_input)
-        .context("Failed to read user input to the model")?;
-    let user_input = user_input.trim();
-
-    // ---- 2) Exit path: send lean close-request and stop ---------------------
-    if user_input.is_empty() || user_input.eq_ignore_ascii_case("exit") {
+    // exit if empty or "exit" (case-insensitive)
+    let Some(user_input) = maybe_line.filter(|s| !s.trim().eq_ignore_ascii_case("exit")) else {
         if !config.notary_config.is_one_shot_mode {
             send_connection_close(request_sender, &config.model_config)
                 .await
                 .context("failed to send close request")?;
         }
-        // We’re done: tell the caller to stop the loop.
         return Ok(true);
-    }
+    };
 
     // ---- 3) Normal request path ---------------------------------------------
     messages.push(serde_json::json!({
