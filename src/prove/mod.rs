@@ -4,7 +4,7 @@ mod setup;
 mod share;
 
 use crate::config::ProveConfig;
-use crate::prove::live_interact::{request_reply_loop, single_interaction_round};
+use crate::prove::live_interact::single_interaction_round;
 use crate::prove::notarise::notarise_session;
 use crate::prove::setup::setup;
 use crate::prove::share::store_interaction_proof_to_file;
@@ -21,7 +21,7 @@ type ProverWithRequestSender = (
     SendRequest<String>,
 );
 
-pub(crate) async fn run_prove(app_config: &ProveConfig) -> Result<()> {
+pub async fn run_prove(app_config: &ProveConfig) -> Result<()> {
     if app_config.notary_config.is_one_shot_mode {
         one_shot_interaction_proving(app_config).await
     } else {
@@ -106,7 +106,13 @@ pub(crate) async fn multi_round_interaction_proving(app_config: &ProveConfig) ->
 
     let mut messages = vec![];
 
-    request_reply_loop(app_config, &mut request_sender, &mut messages).await?;
+    loop {
+        let stop = single_interaction_round(&mut request_sender, app_config, &mut messages).await?;
+
+        if stop {
+            break;
+        }
+    }
 
     println!("🔒 Generating a cryptographic proof of the conversation. Please wait...");
 

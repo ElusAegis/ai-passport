@@ -12,21 +12,6 @@ use hyper::{Method, Request, StatusCode};
 use serde_json::Value;
 use tracing::debug;
 
-pub(super) async fn request_reply_loop(
-    app_config: &ProveConfig,
-    mut request_sender: &mut SendRequest<String>,
-    mut messages: &mut Vec<Value>,
-) -> anyhow::Result<()> {
-    loop {
-        let stop = single_interaction_round(&mut request_sender, app_config, &mut messages).await?;
-
-        if stop {
-            break;
-        }
-    }
-    Ok(())
-}
-
 /// Return value convention:
 /// - Ok(true)  => stop interaction loop
 /// - Ok(false) => continue interaction loop
