@@ -4,6 +4,7 @@ use crate::utils::io_input::try_read_user_input_from_ctx;
 use crate::utils::spinner::with_spinner_future;
 use anyhow::Context;
 use anyhow::Result;
+use dialoguer::console::style;
 use http_body_util::BodyExt;
 use hyper::client::conn::http1::SendRequest;
 use hyper::header::{
@@ -11,7 +12,7 @@ use hyper::header::{
 };
 use hyper::{Method, Request, StatusCode};
 use serde_json::Value;
-use tracing::debug;
+use tracing::{debug, info};
 
 /// Return value convention:
 /// - Ok(true)  => stop interaction loop
@@ -55,10 +56,14 @@ pub(super) async fn single_interaction_round(
     let received_assistant_message: Value =
         with_spinner_future("processing...", get_response(request_sender, request)).await?;
 
-    println!(
-        "\n🤖 Assistant's response:\n\n{}\n",
-        received_assistant_message
-    );
+    let header = style("🤖 Assistant's response:").bold().magenta().dim();
+    let content = received_assistant_message
+        .get("content")
+        .and_then(|v| v.as_str())
+        .context("Failed to get assistant's message content")?;
+    let body = style(content);
+    info!(target: "plain", "\n{header}\n({}) {body}\n", config.model_config.model_id);
+
     messages.push(received_assistant_message);
 
     // Tell caller to continue the loop.

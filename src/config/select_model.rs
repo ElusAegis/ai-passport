@@ -12,6 +12,7 @@ use hyper_rustls::HttpsConnectorBuilder;
 use hyper_util::client::legacy::Client;
 use hyper_util::rt::TokioExecutor;
 use serde::Deserialize;
+use tracing::info;
 
 #[derive(Debug, Deserialize)]
 struct Model {
@@ -40,7 +41,7 @@ pub(crate) async fn select_model_id(api_settings: &ModelConfig) -> Result<String
     let selected = match fetched_model_list {
         Ok(list) => prompt_from_list(list, &term)?,
         Err(error) => {
-            let lines_drawn = print_ephemeral_error(error, &term)?;
+            let lines_drawn = print_ephemeral_error(error)?;
 
             let id = prompt_manual(&term)?;
 
@@ -53,7 +54,7 @@ pub(crate) async fn select_model_id(api_settings: &ModelConfig) -> Result<String
     Ok(selected)
 }
 
-fn print_ephemeral_error(error: Error, term: &Term) -> Result<usize> {
+fn print_ephemeral_error(error: Error) -> Result<usize> {
     let error_message = [
         format!(
             "{} {}",
@@ -68,7 +69,7 @@ fn print_ephemeral_error(error: Error, term: &Term) -> Result<usize> {
         ),
     ];
     for line in &error_message {
-        term.write_line(line)?;
+        info!(target: "plain", "{}", line);
     }
     Ok(error_message.len())
 }

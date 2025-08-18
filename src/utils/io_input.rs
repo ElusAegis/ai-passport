@@ -3,7 +3,12 @@ pub trait InputSource: Send + 'static {
 }
 
 // 2) Task-local holder
+use anyhow::Context;
+use dialoguer::console::{style, Term};
+use std::io::stdin;
 use std::sync::{Arc, Mutex};
+use tracing::info;
+
 tokio::task_local! {
     static INPUT_CTX: Arc<Mutex<dyn InputSource>>;
 }
@@ -32,12 +37,21 @@ pub(crate) struct StdinInputSource;
 
 impl InputSource for StdinInputSource {
     fn next(&mut self) -> anyhow::Result<Option<String>> {
-        use std::io::{self, Write};
-        print!("\n💬 Your message\n(type 'exit' to end): \n> ");
-        io::stdout().flush()?;
+        let term = Term::stdout();
+
+        // Print the prompt via logging
+        info!(target: "plain",
+            "{}\n(type 'exit' to end): \n> ",
+            style("💬 Your message").cyan().bold()
+        );
+
+        // Now reposition the cursor onto the "> " spot
+        term.move_cursor_up(1).context("Failed to move cursor up")?;
+        term.move_cursor_right(2)
+            .context("Failed to move cursor right")?;
 
         let mut line = String::new();
-        io::stdin().read_line(&mut line)?;
+        stdin().read_line(&mut line)?;
         let line = line.trim();
         if line.is_empty() || line.eq_ignore_ascii_case("exit") {
             Ok(None)

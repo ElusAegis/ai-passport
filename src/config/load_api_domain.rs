@@ -4,6 +4,7 @@ use dialoguer::theme::ColorfulTheme;
 use dialoguer::Input;
 use std::env;
 use std::io::IsTerminal;
+use tracing::info;
 
 const API_DOMAIN_ENV_VAR: &str = "MODEL_API_DOMAIN";
 
@@ -37,15 +38,6 @@ pub(crate) fn load_api_domain() -> Result<String> {
     let api_domain =
         prompt_for_api_domain(&term).context("Failed to select the Model API domain")?;
 
-    let label = "Selected Model API domain";
-    let summary = format!(
-        "{} {} · {}",
-        style("✔").green(),
-        style(label).bold(), // make the label bold
-        api_domain
-    );
-    term.write_line(&summary)?;
-
     Ok(api_domain)
 }
 
@@ -61,7 +53,7 @@ fn prompt_for_api_domain(term: &Term) -> Result<String> {
         "The domain must be OpenAI-compatible.".to_string(),
     ];
     for line in &help {
-        term.write_line(line)?;
+        info!(target: "plain", "{}", line);
     }
 
     // Prompt on the same terminal, with validation

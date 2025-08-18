@@ -5,13 +5,17 @@ use crate::prove::share::store_interaction_proof_to_file;
 use crate::prove::ProverWithRequestSender;
 use crate::ProveConfig;
 use anyhow::{Context, Result};
+use dialoguer::console::style;
 use serde_json::Value;
+use std::path::PathBuf;
 use tokio::task::JoinHandle;
-use tracing::debug;
+use tracing::{debug, info};
 
 pub(crate) async fn run_one_shot_prove(app_config: &ProveConfig) -> Result<()> {
     let app_max_single_request_size = app_config.notarisation_config.max_single_request_size;
     let app_max_single_response_size = app_config.notarisation_config.max_single_response_size;
+
+    let mut stored_proofs = Vec::<PathBuf>::new();
 
     // Set up the current instance of the prover
     let cloned_app_config = app_config.clone();
@@ -46,13 +50,13 @@ pub(crate) async fn run_one_shot_prove(app_config: &ProveConfig) -> Result<()> {
             .context("Error notarizing the session")?;
 
         // Save the proof to a file
-        let _file_path = store_interaction_proof_to_file(
+        stored_proofs.push(store_interaction_proof_to_file(
             format!("part_{}", counter).as_str(),
             &attestation,
             &app_config.privacy_config,
             &secrets,
             &app_config.model_config.model_id,
-        )?;
+        )?);
 
         // Prepare for the next iteration
         current_instance_handle = future_instance_handle;
@@ -75,6 +79,26 @@ pub(crate) async fn run_one_shot_prove(app_config: &ProveConfig) -> Result<()> {
             message_byte_size + app_max_single_request_size + app_max_single_response_size;
 
         future_instance_handle = tokio::spawn(async move { setup(&cloned_app_config).await });
+    }
+
+    if !stored_proofs.is_empty() {
+        info!(target: "plain",
+            "\n{} {}",
+            style("✔").green(),
+            style("All proofs successfully saved").bold(),
+        );
+
+        for (i, proof) in stored_proofs.iter().enumerate() {
+            info!(target: "plain", "{} Assistant message {} → {}", style("📂").dim(), i + 1, proof.display());
+        }
+
+        info!(target: "plain",
+            "\n{} {}",
+            style("🔍").yellow(),
+            style("You can verify these proofs anytime with the CLI: `verify <proof_file>`").dim()
+        );
+    } else {
+        info!(target: "plain", "No proofs were generated during this session.");
     }
 
     Ok(())

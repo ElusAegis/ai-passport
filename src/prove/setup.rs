@@ -18,7 +18,7 @@ use tlsn_verifier::{Verifier, VerifierConfig};
 use tokio::task::JoinHandle;
 use tokio_util::compat::FuturesAsyncReadCompatExt;
 use tokio_util::compat::TokioAsyncReadCompatExt;
-use tracing::debug;
+use tracing::{debug, info};
 
 pub(super) async fn setup(
     config: &ProveConfig,
@@ -243,26 +243,26 @@ fn handle_notary_setup_error(
     total_recv: usize,
     err: Error,
 ) -> Result<NotaryConnection, Error> {
-    println!(
+    info!(target: "plain",
         "{} {}",
         style("✖").red().bold(),
         style("Notary rejected the setup request").bold()
     );
 
     // Show both single-message caps and total channel caps (bytes).
-    println!(
+    info!(target: "plain",
         "{}",
         style("   Current Configuration Requirements (bytes):").bold()
     );
 
-    println!(
+    info!(target: "plain",
         "{}",
         style(format!(
             "   • Required channel sent max:   {total_sent} (bytes)"
         ))
         .dim()
     );
-    println!(
+    info!(target: "plain",
         "{}",
         style(format!(
             "   • Required channel recv max:   {total_recv} (bytes)"
@@ -271,8 +271,8 @@ fn handle_notary_setup_error(
     );
 
     // Concise hint & fix
-    println!("{}", style("   Hint:").bold());
-    println!(
+    info!(target: "plain", "{}", style("   Hint:").bold());
+    info!(target: "plain",
         "{}",
         style(
             "   • Total limits can exceed the notary policy even if initial single-message caps look fine."
@@ -280,14 +280,14 @@ fn handle_notary_setup_error(
         .dim()
     );
 
-    println!("{}", style("   How to fix:").bold());
-    println!(
+    info!(target: "plain", "{}", style("   How to fix:").bold());
+    info!(target: "plain",
         "{}",
         style("   • Lower --max-single-request-size / --max-single-response-size or their respective env vars.")
             .dim()
     );
-    println!("{}", style("   • In multi-round mode, total sent grows ~ O(n²); reduce n or increase totals within policy.").dim());
-    println!(
+    info!(target: "plain", "{}", style("   • In multi-round mode, total sent grows ~ O(n²); reduce n or increase totals within policy.").dim());
+    info!(target: "plain",
         "{}",
         style("   • In one-shot mode, total recv grows ~ O(2n); reduce --max-req-num-sent or increase totals within policy.")
             .dim()

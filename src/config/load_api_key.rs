@@ -4,6 +4,7 @@ use dialoguer::theme::ColorfulTheme;
 use dialoguer::Password;
 use std::env;
 use std::io::IsTerminal;
+use tracing::info;
 
 const API_KEY_ENV_VAR: &str = "MODEL_API_KEY";
 
@@ -16,11 +17,11 @@ pub(crate) fn load_api_key() -> Result<String> {
 
     if let Ok(api_key) = env::var(API_KEY_ENV_VAR) {
         // Final concise confirmation (no secret shown)
-        term.write_line(&format!(
+        info!(target: "plain", "{}", format!(
             "{} {}",
             style("✔").green(),
             style("API key set through ENV").bold(),
-        ))?;
+        ));
 
         return Ok(api_key);
     }
@@ -37,11 +38,11 @@ pub(crate) fn load_api_key() -> Result<String> {
     let api_key = prompt_for_api_key(&term).context("Failed to read the Model API key")?;
 
     // Final concise confirmation (no secret shown)
-    term.write_line(&format!(
+    info!(target: "plain", "{}", format!(
         "{} {}",
         style("✔").green(),
         style("API key set through CLI").bold(),
-    ))?;
+    ));
 
     Ok(api_key)
 }
@@ -54,7 +55,7 @@ fn prompt_for_api_key(term: &Term) -> Result<String> {
         "The key must match your configured Model API domain.".to_string(),
     ];
     for line in &help {
-        term.write_line(line)?;
+        info!(target: "plain", "{}", line);
     }
 
     // Prompt (masked)
@@ -67,7 +68,7 @@ fn prompt_for_api_key(term: &Term) -> Result<String> {
                 Ok(())
             }
         })
-        .interact_on(&term)
+        .interact_on(term)
         .context("Failed to read Model API key")?;
 
     // Clear helper + prompt (best-effort)

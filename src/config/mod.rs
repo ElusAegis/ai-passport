@@ -11,6 +11,7 @@ use derive_builder::Builder;
 use dialoguer::console::style;
 use std::path::PathBuf;
 use tlsn_common::config::NetworkSetting;
+use tracing::info;
 
 mod load_api_domain;
 mod load_api_key;
@@ -212,33 +213,24 @@ impl ProveConfig {
         let fmt_kb_1 = |bytes: usize| format!("{:.1} KB", bytes as f64 / 1024.0);
         let est_tokens = |bytes: usize| bytes / 5;
 
-        // Normalize routes so the print is consistent
-        let norm_route = |r: &str| {
-            if r.starts_with('/') {
-                r.to_string()
-            } else {
-                format!("/{}", r)
-            }
-        };
-
         // --- Model API -----------------------------------------------------------
-        println!(
+        info!(target: "plain",
             "{}",
             kv(
                 "Model Inference API",
                 format!(
-                    "{}:{}{}",
+                    "{}:{}/{}",
                     config.model_config.domain,
                     config.model_config.port,
-                    norm_route(&config.model_config.inference_route),
+                    &config.model_config.inference_route.trim_start_matches('/'),
                 ),
             )
         );
 
-        println!("{}", kv("Model ID", config.model_config.model_id.clone()));
+        info!(target: "plain", "{}", kv("Model ID", config.model_config.model_id.clone()));
 
         // --- Notary --------------------------------------------------------------
-        println!(
+        info!(target: "plain",
             "{}",
             kv(
                 "Notary API",
@@ -255,7 +247,7 @@ impl ProveConfig {
             )
         );
 
-        println!(
+        info!(target: "plain",
             "{}",
             kv(
                 "Notary Mode",
@@ -268,7 +260,7 @@ impl ProveConfig {
         let s_res = config.notarisation_config.max_single_response_size;
         let (total_sent, total_recv) = get_total_sent_recv_max(&config.notarisation_config);
 
-        println!(
+        info!(target: "plain",
             "{}",
             kv(
                 "Protocol Session Mode",
@@ -276,7 +268,7 @@ impl ProveConfig {
             )
         );
 
-        println!(
+        info!(target: "plain",
             "{}",
             kv(
                 "Max Number of Model Requests",
@@ -284,7 +276,7 @@ impl ProveConfig {
             )
         );
 
-        println!(
+        info!(target: "plain",
             "{}",
             kv(
                 "Max Single Request Size",
@@ -297,7 +289,7 @@ impl ProveConfig {
             )
         );
 
-        println!(
+        info!(target: "plain",
             "{}",
             kv(
                 "Max Single Response Size",
@@ -311,7 +303,7 @@ impl ProveConfig {
         );
 
         // --- Footer --------------------------------------------------------------
-        println!(
+        info!(target: "plain",
             "{} {} {}\n\n",
             style("✔").blue(),
             style("Configuration complete").bold(),
