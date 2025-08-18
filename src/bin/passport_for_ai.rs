@@ -21,12 +21,19 @@ async fn main() -> Result<()> {
     application.run().await
 }
 
+use dialoguer::console::style;
+
 fn print_welcome_message() {
-    // Print the rules on how to use the application
     println!();
-    println!();
-    println!("🌟 Welcome to the Proofs-of-Autonomy CLI! 🌟");
-    println!("Create and verify cryptographic proofs of model conversations.");
-    println!();
+    println!(
+        "{} {} {}",
+        style("◆").blue().bold(),
+        style("Welcome to the Proofs-of-Autonomy CLI").bold(),
+        style("◆").blue().bold(),
+    );
+    println!(
+        "{}",
+        style("Create and verify cryptographic proofs of model conversations.").dim()
+    );
     println!();
 }

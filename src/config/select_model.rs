@@ -50,14 +50,6 @@ pub(crate) async fn select_model_id(api_settings: &ModelConfig) -> Result<String
         }
     };
 
-    // Our own compact confirmation (no dialoguer report line).
-    term.write_line(&format!(
-        "{} {} {}",
-        style("✔").green().bold(),
-        style("selected model id").bold(),
-        style(format!("· {}", selected)).dim()
-    ))?;
-
     Ok(selected)
 }
 

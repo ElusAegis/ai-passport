@@ -22,15 +22,6 @@ pub(crate) fn load_api_domain() -> Result<String> {
     if let Ok(api_domain) = env::var(API_DOMAIN_ENV_VAR) {
         validate_api_domain(&api_domain)?;
 
-        let label = "Using set Model API domain";
-        let summary = format!(
-            "{} {} · {}",
-            style("✔").green(),
-            style(label).bold(),
-            api_domain
-        );
-        term.write_line(&summary)?;
-
         return Ok(api_domain);
     }
 
@@ -89,7 +80,7 @@ fn prompt_for_api_domain(term: &Term) -> Result<String> {
     Ok(api_domain)
 }
 
-pub fn validate_api_domain(input: &String) -> Result<()> {
+pub fn validate_api_domain(input: &str) -> Result<()> {
     let s = input.trim();
 
     if s.is_empty() {

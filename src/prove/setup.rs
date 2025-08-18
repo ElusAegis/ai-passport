@@ -1,25 +1,19 @@
-use crate::config::{NotaryConfig, ProveConfig};
-use anyhow::{Context, Result};
-#[cfg(feature = "ephemeral-notary")]
+use crate::args::NotaryMode;
+use crate::config::{NotarisationConfig, ProveConfig};
+use anyhow::{Context, Error, Result};
+use dialoguer::console::style;
 use futures::{AsyncRead, AsyncWrite};
 use hyper::client::conn::http1::SendRequest;
 use hyper_util::rt::TokioIo;
-#[cfg(feature = "ephemeral-notary")]
 use k256::{pkcs8::DecodePrivateKey, SecretKey};
-#[cfg(not(feature = "ephemeral-notary"))]
 use notary_client::{Accepted, NotarizationRequest, NotaryClient, NotaryConnection};
 use tlsn_common::config::ProtocolConfig;
-#[cfg(feature = "ephemeral-notary")]
 use tlsn_common::config::ProtocolConfigValidator;
-#[cfg(feature = "ephemeral-notary")]
 use tlsn_core::attestation::AttestationConfig;
-#[cfg(feature = "ephemeral-notary")]
 use tlsn_core::signing::SignatureAlgId;
-#[cfg(feature = "ephemeral-notary")]
 use tlsn_core::CryptoProvider;
 use tlsn_prover::state::Setup;
 use tlsn_prover::{state, Prover, ProverConfig, ProverError};
-#[cfg(feature = "ephemeral-notary")]
 use tlsn_verifier::{Verifier, VerifierConfig};
 use tokio::task::JoinHandle;
 use tokio_util::compat::FuturesAsyncReadCompatExt;
@@ -33,7 +27,7 @@ pub(super) async fn setup(
     SendRequest<String>,
 )> {
     // Set up protocol configuration for prover.
-    let protocol_config = build_protocol_config(&config.notary_config)
+    let protocol_config = build_protocol_config(&config.notarisation_config)
         .context("Error building protocol configuration")?;
 
     // Configure a new prover with the unique session id returned from notary client.
@@ -44,7 +38,7 @@ pub(super) async fn setup(
         .context("Error building prover configuration")?;
 
     // Create a new prover and set up the MPC backend.
-    let prover = init_prover(prover_config, &config.notary_config)
+    let prover = init_prover(prover_config, &config.notarisation_config)
         .await
         .context("Error setting up notary connection for the prover")?;
 
@@ -80,22 +74,18 @@ pub(super) async fn setup(
 
 pub async fn init_prover(
     prover_config: ProverConfig,
-    config: &NotaryConfig,
+    config: &NotarisationConfig,
 ) -> Result<Prover<Setup>> {
     let prover_init = Prover::new(prover_config);
 
-    #[cfg(feature = "ephemeral-notary")]
-    {
+    if matches!(config.notary_config.mode, NotaryMode::Ephemeral) {
         let prover_sock = setup_ephemeral_notary(config)?;
 
         prover_init
             .setup(prover_sock)
             .await
             .context("setting up prover with ephemeral notary")
-    }
-
-    #[cfg(not(feature = "ephemeral-notary"))]
-    {
+    } else {
         let prover_sock: NotaryConnection = setup_remote_notary(config).await?;
 
         prover_init
@@ -105,12 +95,12 @@ pub async fn init_prover(
     }
 }
 
-pub fn build_protocol_config(config: &NotaryConfig) -> Result<ProtocolConfig> {
+pub fn build_protocol_config(config: &NotarisationConfig) -> Result<ProtocolConfig> {
     let mut b = ProtocolConfig::builder();
 
     let (total_sent, total_recv) = get_total_sent_recv_max(config);
 
-    if !config.is_one_shot_mode {
+    if matches!(config.mode, crate::args::SessionMode::MultiRound) {
         let n = config.max_req_num_sent;
         let rsp = config.max_single_response_size; // We need to prematurely decrypt all responses, but the last one
         let total_recv_online = rsp * (n - 1);
@@ -126,8 +116,8 @@ pub fn build_protocol_config(config: &NotaryConfig) -> Result<ProtocolConfig> {
         .context("Error building protocol configuration")
 }
 
-pub fn get_total_sent_recv_max(config: &NotaryConfig) -> (usize, usize) {
-    if config.is_one_shot_mode {
+pub fn get_total_sent_recv_max(config: &NotarisationConfig) -> (usize, usize) {
+    if matches!(config.mode, crate::args::SessionMode::OneShot) {
         // --- One‑shot: exact, per‑round sizing --------------------------------
         //
         // We create a new protocol instance per request. We already know (or can
@@ -162,9 +152,8 @@ pub fn get_total_sent_recv_max(config: &NotaryConfig) -> (usize, usize) {
 }
 
 /// Runs a simple Notary with the provided connection to the Prover.
-#[cfg(feature = "ephemeral-notary")]
 pub fn setup_ephemeral_notary(
-    notary_config: &NotaryConfig,
+    notary_config: &NotarisationConfig,
 ) -> Result<impl AsyncWrite + AsyncRead + Send + Unpin + 'static> {
     // Use an in‑process duplex pipe as the notary transport.
     let (prover_sock, notary_sock) = tokio::io::duplex(1 << 16);
@@ -216,11 +205,19 @@ pub fn setup_ephemeral_notary(
     Ok(prover_sock.compat())
 }
 
-#[cfg(not(feature = "ephemeral-notary"))]
-async fn setup_remote_notary(notary_config: &NotaryConfig) -> Result<NotaryConnection> {
-    let notary_client: NotaryClient = build_notary_client().context("building notary client")?;
+async fn setup_remote_notary(config: &NotarisationConfig) -> Result<NotaryConnection> {
+    let notary_config = &config.notary_config;
 
-    let (total_sent, total_recv) = get_total_sent_recv_max(notary_config);
+    let notary_client: NotaryClient = NotaryClient::builder()
+        .host(&notary_config.domain)
+        .port(notary_config.port)
+        .path_prefix(&notary_config.path_prefix)
+        .enable_tls(matches!(notary_config.mode, NotaryMode::RemoteTLS))
+        .build()
+        .context("Failed to build Notary client")?;
+
+    // total channel caps (bytes) — computed from mode/rounds
+    let (total_sent, total_recv) = get_total_sent_recv_max(config);
 
     let req = NotarizationRequest::builder()
         .max_sent_data(total_sent)
@@ -228,42 +225,73 @@ async fn setup_remote_notary(notary_config: &NotaryConfig) -> Result<NotaryConne
         .build()
         .context("building notarization request")?;
 
-    debug!("Requesting notarization…");
-
-    let Accepted { io, .. } = notary_client
+    match notary_client
         .request_notarization(req)
         .await
-        .context("requesting notarization")?;
-
-    Ok(io)
+        .context("requesting notarization")
+    {
+        Ok(Accepted { io, .. }) => Ok(io),
+        Err(err) => handle_notary_setup_error(total_sent, total_recv, err),
+    }
 }
 
-/// Builds a `NotaryClient` configured for either a local or remote notary server,
-/// depending on the `LOCAL_NOTARY` environment variable.
-/// Connects to a local server without TLS if set, otherwise uses the remote notary with TLS.
-/// Returns the configured `NotaryClient` or an error.
-///
-/// To run a local notary server, run `cargo run --release --bin notary-server`
-/// in the `[tlsn](https://github.com/tlsnotary/tlsn)` repository.
-#[cfg(not(feature = "ephemeral-notary"))]
-fn build_notary_client() -> Result<NotaryClient> {
-    let mut notary_builder = NotaryClient::builder();
+/// Helps the user understand why the notary setup failed and how to fix it.
+/// We handle it so explicitly because the error can be very prominent
+/// due to the likely chance of misconfiguration and exceeding the notary policy.
+fn handle_notary_setup_error(
+    total_sent: usize,
+    total_recv: usize,
+    err: Error,
+) -> Result<NotaryConnection, Error> {
+    println!(
+        "{} {}",
+        style("✖").red().bold(),
+        style("Notary rejected the setup request").bold()
+    );
 
-    if std::env::var("LOCAL_NOTARY").is_ok() {
-        notary_builder
-            .host("localhost".to_string())
-            .port(7047)
-            .path_prefix("")
-            .enable_tls(false)
-    } else {
-        notary_builder
-            .host("notary.pse.dev")
-            .port(443)
-            .path_prefix("v0.1.0-alpha.12")
-            .enable_tls(true)
-    };
+    // Show both single-message caps and total channel caps (bytes).
+    println!(
+        "{}",
+        style("   Current Configuration Requirements (bytes):").bold()
+    );
 
-    notary_builder
-        .build()
-        .context("Failed to build NotaryClient")
+    println!(
+        "{}",
+        style(format!(
+            "   • Required channel sent max:   {total_sent} (bytes)"
+        ))
+        .dim()
+    );
+    println!(
+        "{}",
+        style(format!(
+            "   • Required channel recv max:   {total_recv} (bytes)"
+        ))
+        .dim()
+    );
+
+    // Concise hint & fix
+    println!("{}", style("   Hint:").bold());
+    println!(
+        "{}",
+        style(
+            "   • Total limits can exceed the notary policy even if initial single-message caps look fine."
+        )
+        .dim()
+    );
+
+    println!("{}", style("   How to fix:").bold());
+    println!(
+        "{}",
+        style("   • Lower --max-single-request-size / --max-single-response-size or their respective env vars.")
+            .dim()
+    );
+    println!("{}", style("   • In multi-round mode, total sent grows ~ O(n²); reduce n or increase totals within policy.").dim());
+    println!(
+        "{}",
+        style("   • In one-shot mode, total recv grows ~ O(2n); reduce --max-req-num-sent or increase totals within policy.")
+            .dim()
+    );
+
+    Err(err)
 }

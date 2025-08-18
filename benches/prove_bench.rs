@@ -5,8 +5,8 @@ use criterion::{
 };
 
 use passport_for_ai::{
-    run_prove, with_input_source, InputSource, ModelConfig, NotaryConfig, PrivacyConfig,
-    ProveConfig,
+    run_prove, with_input_source, InputSource, ModelConfig, NotarisationConfig, NotaryConfig,
+    NotaryMode, PrivacyConfig, ProveConfig, SessionMode,
 };
 
 use rand::distr::Alphanumeric;
@@ -32,12 +32,6 @@ impl InputSource for VecInputSource {
     fn next(&mut self) -> anyhow::Result<Option<String>> {
         Ok(self.buf.next().flatten())
     }
-}
-
-#[derive(Clone, Copy, Debug)]
-enum SessionMode {
-    OneShot,
-    MultiRound,
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -114,21 +108,30 @@ fn build_config(
     let privacy_config = PrivacyConfig::default();
 
     let notary_config = NotaryConfig::builder()
+        .port(7074u16)
+        .domain("localhost".to_string())
+        .path_prefix("v0.1.0-alpha.12")
+        .mode(NotaryMode::RemoteNonTLS)
+        .build()
+        .expect("notary_config");
+
+    let notarisation_config = NotarisationConfig::builder()
+        .notary_config(notary_config)
         .max_req_num_sent(max_req_num_sent)
-        .max_single_request_size(256 * 1024) // sensible ceilings; adjust to your envelope
-        .max_single_response_size(2 * 1024 * 1024)
+        .max_single_request_size(1024) // sensible ceilings; adjust to your envelope
+        .max_single_response_size(1024)
         .network_optimization(match net {
             NetOpt::Latency => NetworkSetting::Latency,
             NetOpt::Bandwidth => NetworkSetting::Bandwidth,
         })
-        .is_one_shot_mode(matches!(mode, SessionMode::OneShot))
+        .mode(mode)
         .build()
         .expect("notary_config");
 
     ProveConfig::builder()
         .model_config(model_config)
         .privacy_config(privacy_config)
-        .notary_config(notary_config)
+        .notarisation_config(notarisation_config)
         .build()
         .expect("prove_config")
 }

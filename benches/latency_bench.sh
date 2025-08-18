@@ -38,8 +38,8 @@ if [ -f .env ]; then
   # shellcheck disable=SC1091
   . ./.env
   set +a
-  TARGET_URL_ENV="${TARGET_URL:-}"
-  NOTARY_URL_ENV="${NOTARY_URL:-}"
+  TARGET_URL_ENV="${MODEL_API_DOMAIN:-}"
+  NOTARY_URL_ENV="${NOTARY_DOMAIN:-}"
   if [ -n "${TARGET_URL_ENV}" ] || [ -n "${NOTARY_URL_ENV}" ]; then
     echo "ℹ️  Loaded .env (optional): detected TARGET_URL='${TARGET_URL_ENV:-unset}', NOTARY_URL='${NOTARY_URL_ENV:-unset}'."
   else

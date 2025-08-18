@@ -1,3 +1,4 @@
+use crate::args::SessionMode;
 use crate::config::{ModelConfig, ProveConfig};
 use crate::utils::io_input::try_read_user_input_from_ctx;
 use crate::utils::spinner::with_spinner_future;
@@ -19,7 +20,7 @@ pub(super) async fn single_interaction_round(
     request_sender: &mut SendRequest<String>,
     config: &ProveConfig,
     messages: &mut Vec<Value>,
-) -> anyhow::Result<bool> {
+) -> Result<bool> {
     // ---- 1) Read user input -------------------------------------------------
     // Prefer using context; fall back to stdin if absent.
     let maybe_line: Option<String> =
@@ -27,7 +28,7 @@ pub(super) async fn single_interaction_round(
 
     // exit if empty or "exit" (case-insensitive)
     let Some(user_input) = maybe_line.filter(|s| !s.trim().eq_ignore_ascii_case("exit")) else {
-        if !config.notary_config.is_one_shot_mode {
+        if matches!(config.notarisation_config.mode, SessionMode::MultiRound) {
             send_connection_close(request_sender, &config.model_config)
                 .await
                 .context("failed to send close request")?;
@@ -44,7 +45,7 @@ pub(super) async fn single_interaction_round(
     let request = generate_request(
         messages,
         &config.model_config,
-        config.notary_config.is_one_shot_mode,
+        matches!(config.notarisation_config.mode, SessionMode::OneShot),
     )
     .context("Error generating request")?;
 
@@ -104,7 +105,7 @@ async fn get_response(
 pub(crate) async fn send_connection_close(
     request_sender: &mut SendRequest<String>,
     model_settings: &ModelConfig,
-) -> anyhow::Result<()> {
+) -> Result<()> {
     let req = Request::builder()
         .method(Method::GET) // or HEAD if your endpoint allows it
         .uri(model_settings.inference_route.as_str())
@@ -126,7 +127,7 @@ pub(crate) fn generate_request(
     messages: &Vec<Value>,
     model_settings: &ModelConfig,
     close_connection: bool,
-) -> anyhow::Result<Request<String>> {
+) -> Result<Request<String>> {
     let messages_val = serde_json::to_value(messages).context("Error serializing messages")?;
 
     let mut json_body = serde_json::Map::new();
