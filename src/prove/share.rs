@@ -1,12 +1,15 @@
 use crate::config::PrivacyConfig;
-use anyhow::Context;
-use std::fs::File;
-use std::io::Write;
-use std::path::PathBuf;
+use anyhow::{Context, Result};
+use std::collections::HashSet;
+use std::fs;
+use std::path::{Path, PathBuf};
 use tlsn_core::attestation::Attestation;
 use tlsn_core::presentation::Presentation;
+use tlsn_core::transcript::TranscriptProof;
 use tlsn_core::{CryptoProvider, Secrets};
 use tlsn_formats::http::HttpTranscript;
+
+const PROOFS_DIR: &str = "model_ips";
 
 pub(super) fn store_interaction_proof_to_file(
     postfix: &str,
@@ -14,92 +17,113 @@ pub(super) fn store_interaction_proof_to_file(
     privacy_config: &PrivacyConfig,
     secrets: &Secrets,
     model_id: &str,
-) -> anyhow::Result<PathBuf> {
-    let transcript = HttpTranscript::parse(secrets.transcript())?;
+) -> Result<PathBuf> {
+    // 1) Build transcript proof with selective disclosure
+    let transcript_proof =
+        build_transcript_proof(secrets, privacy_config).context("building transcript proof")?;
 
-    // Build a transcript proof.
-    let mut builder = secrets.transcript_proof_builder();
+    // 2) Build the final presentation (identity + transcript proofs)
+    let presentation = build_presentation(attestation, secrets, transcript_proof)
+        .context("building presentation")?;
 
-    for request in transcript.requests.iter() {
-        builder.reveal_sent(&request.without_data())?;
-        builder.reveal_sent(&request.request.target)?;
+    // 3) Ensure proofs/ exists and construct the output file path
+    ensure_dir(PROOFS_DIR).context("creating model_ips/ directory")?;
+    let file_path = proof_path(PROOFS_DIR, model_id, postfix);
 
-        if request.body.is_some() {
-            let content = &request.body.as_ref().unwrap().content;
-            builder
-                .reveal_sent(content)
-                .context("Failed to reveal sent content")?;
+    // 4) Serialize and write JSON
+    let json =
+        serde_json::to_string_pretty(&presentation).context("serializing presentation to JSON")?;
+    fs::write(&file_path, json).context("writing interaction proof to file")?;
+
+    Ok(file_path)
+}
+
+// --- helpers ---
+
+fn build_transcript_proof(secrets: &Secrets, privacy: &PrivacyConfig) -> Result<TranscriptProof> {
+    let transcript =
+        HttpTranscript::parse(secrets.transcript()).context("parsing HTTP transcript")?;
+
+    // Precompute lowercased header names to censor
+    let req_censor: HashSet<String> = privacy
+        .request_topics_to_censor
+        .iter()
+        .map(|s| s.to_lowercase())
+        .collect();
+    let resp_censor: HashSet<String> = privacy
+        .response_topics_to_censor
+        .iter()
+        .map(|s| s.to_lowercase())
+        .collect();
+
+    let mut b = secrets.transcript_proof_builder();
+
+    // Requests
+    for req in &transcript.requests {
+        b.reveal_sent(&req.without_data())?;
+        b.reveal_sent(&req.request.target)?;
+        if let Some(body) = &req.body {
+            b.reveal_sent(&body.content).context("reveal sent body")?;
         }
-
-        for header in request.headers.iter() {
-            if privacy_config
-                .request_topics_to_censor
-                .contains(&header.name.as_str().to_lowercase().as_str())
-            {
-                builder.reveal_sent(&header.without_value())?;
+        for h in &req.headers {
+            if req_censor.contains(&h.name.as_str().to_lowercase()) {
+                b.reveal_sent(&h.without_value())?;
             } else {
-                builder.reveal_sent(header)?;
+                b.reveal_sent(h)?;
             }
         }
     }
 
-    for response in transcript.responses.iter() {
-        builder.reveal_recv(&response.without_data())?;
-
-        if response.body.is_some() {
-            let content = &response.body.as_ref().unwrap().content;
-            builder
-                .reveal_recv(content)
-                .context("Failed to reveal received content")?;
+    // Responses
+    for resp in &transcript.responses {
+        b.reveal_recv(&resp.without_data())?;
+        if let Some(body) = &resp.body {
+            b.reveal_recv(&body.content).context("reveal recv body")?;
         }
-
-        for header in response.headers.iter() {
-            if privacy_config
-                .response_topics_to_censor
-                .contains(&header.name.as_str().to_lowercase().as_str())
-            {
-                builder.reveal_recv(&header.without_value())?;
+        for h in &resp.headers {
+            if resp_censor.contains(&h.name.as_str().to_lowercase()) {
+                b.reveal_recv(&h.without_value())?;
             } else {
-                builder.reveal_recv(header)?;
+                b.reveal_recv(h)?;
             }
         }
     }
 
-    let transcript_proof = builder.build()?;
+    let proof = b.build().context("finalizing transcript proof")?;
+    Ok(proof)
+}
 
-    // Use default crypto provider to build the presentation.
+fn build_presentation(
+    attestation: &Attestation,
+    secrets: &Secrets,
+    transcript_proof: TranscriptProof,
+) -> Result<Presentation> {
     let provider = CryptoProvider::default();
-
-    let mut builder = attestation.presentation_builder(&provider);
-
-    builder
-        .identity_proof(secrets.identity_proof())
+    let mut pb = attestation.presentation_builder(&provider);
+    pb.identity_proof(secrets.identity_proof())
         .transcript_proof(transcript_proof);
+    Ok(pb.build()?)
+}
 
-    let presentation: Presentation = builder.build()?;
+fn ensure_dir<P: AsRef<Path>>(dir: P) -> Result<()> {
+    fs::create_dir_all(&dir).with_context(|| format!("mkdir -p {}", dir.as_ref().display()))
+}
 
-    // Generate timestamp
-    let timestamp = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .expect("Time went backwards")
-        .as_secs();
+fn proof_path(dir: &str, model_id: &str, postfix: &str) -> PathBuf {
+    let ts = unix_ts();
+    let model = sanitize_model_id(model_id);
+    let filename = format!("{model}_{ts}_{postfix}_interaction_proof.json");
+    Path::new(dir).join(filename)
+}
 
-    // Create file path
-    let sanitised_model_id = model_id.replace(" ", "_").replace("/", "_");
-    let file_path = format!(
-        "{}_{}_{}_interaction_proof.json",
-        sanitised_model_id, timestamp, postfix
-    );
-    let path_buf = PathBuf::from(&file_path);
+fn unix_ts() -> u64 {
+    use std::time::{SystemTime, UNIX_EPOCH};
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .expect("system time before UNIX_EPOCH")
+        .as_secs()
+}
 
-    // Create and write to file
-    let mut file = File::create(&path_buf).context("Failed to create proof file")?;
-
-    let attestation_content =
-        serde_json::to_string_pretty(&presentation).context("Failed to serialize presentation")?;
-
-    file.write_all(attestation_content.as_bytes())
-        .context("Failed to write interaction proof to file")?;
-
-    Ok(path_buf)
+fn sanitize_model_id(s: &str) -> String {
+    s.replace([' ', '/'], "_")
 }

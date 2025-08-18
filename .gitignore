@@ -3,5 +3,5 @@
 /model/*.json
 !/model/input.json
 /.env
-/*_interaction_proof.json
+model_ips/*_interaction_proof.json
 
