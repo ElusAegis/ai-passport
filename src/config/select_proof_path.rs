@@ -1,11 +1,16 @@
 use anyhow::Result;
+use dialoguer::console::style;
 use dialoguer::{theme::ColorfulTheme, Input};
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
-pub(crate) fn select_proof_path() -> Result<String> {
+pub(crate) fn select_proof_path() -> Result<PathBuf> {
     // Prompt with validation: path must exist and be a regular file
     let raw: String = Input::with_theme(&ColorfulTheme::default())
-        .with_prompt("Enter the path to the proof file")
+        .with_prompt(format!(
+            "{} {}",
+            style("📂").dim(),
+            style("Proof file path").bold()
+        ))
         .validate_with(|s: &String| -> std::result::Result<(), String> {
             let p = Path::new(s);
             if !p.exists() {
@@ -19,5 +24,8 @@ pub(crate) fn select_proof_path() -> Result<String> {
         })
         .interact_text()?;
 
-    Ok(raw)
+    // Canonicalize if possible; fall back to the raw path
+    let path = std::fs::canonicalize(&raw).unwrap_or_else(|_| PathBuf::from(&raw));
+
+    Ok(path)
 }

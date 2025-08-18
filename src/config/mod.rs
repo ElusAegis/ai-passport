@@ -317,6 +317,7 @@ impl ProveConfig {
 #[derive(Builder)]
 pub struct VerifyConfig {
     pub(crate) proof_path: PathBuf,
+    pub(crate) accept_key: bool,
 }
 
 impl VerifyConfig {
@@ -334,6 +335,18 @@ impl VerifyConfig {
         let path = PathBuf::from(raw_path);
         let path = std::fs::canonicalize(&path).unwrap_or(path);
 
-        Self::builder().proof_path(path).build().map_err(Into::into)
+        // Consistent, concise summary line
+        info!(target: "plain",
+            "{} {} {}",
+            style("✔").green(),
+            style("Selected proof path").bold(),
+            style(path.display().to_string()).dim()
+        );
+
+        Self::builder()
+            .proof_path(path)
+            .accept_key(args.accept_key)
+            .build()
+            .map_err(Into::into)
     }
 }

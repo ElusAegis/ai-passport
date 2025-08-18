@@ -201,9 +201,16 @@ fn parse_notary_type(s: &str) -> Result<NotaryMode, String> {
 pub(crate) struct VerifyArgs {
     /// Path to the generated proof to verify (optional)
     #[arg(
-        long,
         value_hint = ValueHint::FilePath,
-        env = "APP_PROOF_PATH"
     )]
-    pub(crate) proof_path: Option<String>,
+    pub(crate) proof_path: Option<PathBuf>,
+    /// Flag to by default accepts the key used in the proof
+    /// WARNING: this is insecure and should only be used for testing purposes.
+    #[arg(
+        long,
+        env = "ACCEPT_KEY",
+        default_value_t = false,
+        hide = true // Hide this option from the help output
+    )]
+    pub(crate) accept_key: bool,
 }
