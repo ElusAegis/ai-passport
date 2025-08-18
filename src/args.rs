@@ -41,14 +41,14 @@ pub enum NotaryMode {
     RemoteTLS,
 }
 
-#[derive(Parser, Debug)]
+#[derive(Parser)]
 #[command(author, version, about)]
 pub struct Cli {
     #[command(subcommand)]
     pub(crate) cmd: Command,
 }
 
-#[derive(Subcommand, Debug)]
+#[derive(Subcommand)]
 pub(crate) enum Command {
     /// Prove model interaction
     Prove(ProveArgs),
@@ -57,7 +57,7 @@ pub(crate) enum Command {
     Verify(VerifyArgs),
 }
 
-#[derive(Args, Debug)]
+#[derive(Args)]
 pub(crate) struct ProveArgs {
     /// Specify the model to use (optional for proving)
     #[arg(long)]
@@ -197,7 +197,7 @@ fn parse_notary_type(s: &str) -> Result<NotaryMode, String> {
     }
 }
 
-#[derive(Args, Debug)]
+#[derive(Args)]
 pub(crate) struct VerifyArgs {
     /// Path to the generated proof to verify (optional)
     #[arg(
