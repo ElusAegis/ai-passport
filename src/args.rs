@@ -14,7 +14,7 @@ pub const DEFAULT_NOTARY_VERSION: &str = "v0.1.0-alpha.12"; // default notary ve
 
 pub const DEFAULT_MAX_REQ_NUM_SENT: usize = 3; // e.g., up to 3 model API calls
 pub const DEFAULT_MAX_SINGLE_REQUEST_SIZE: usize = 1024; // 1 KiB prompt budget
-pub const DEFAULT_MAX_SINGLE_RESPONSE_SIZE: usize = 1014; // 1 KiB response budget
+pub const DEFAULT_MAX_SINGLE_RESPONSE_SIZE: usize = 1024; // 1 KiB response budget
 
 #[derive(Clone, Copy, Debug, Default, Serialize, Deserialize)]
 pub enum SessionMode {

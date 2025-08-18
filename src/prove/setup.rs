@@ -98,35 +98,39 @@ pub async fn init_prover(
 pub fn build_protocol_config(config: &NotarisationConfig) -> Result<ProtocolConfig> {
     let mut b = ProtocolConfig::builder();
 
-    let (total_sent, total_recv) = get_total_sent_recv_max(config);
-
     if matches!(config.mode, crate::args::SessionMode::MultiRound) {
-        let n = config.max_req_num_sent;
-        let rsp = config.max_single_response_size; // We need to prematurely decrypt all responses, but the last one
-        let total_recv_online = rsp * (n - 1);
+        let (total_sent, total_recv) = get_total_sent_recv_max(config);
+
+        let total_recv_online = total_recv; // TODO - we can optimize to rsp * (n - 1)
 
         b.defer_decryption_from_start(false)
             .max_recv_data_online(total_recv_online);
+        b.max_sent_data(total_sent).max_recv_data(total_recv);
+    } else {
+        b.max_sent_data(config.max_single_request_size)
+            .max_recv_data(config.max_single_response_size);
     }
 
-    b.max_sent_data(total_sent)
-        .max_recv_data(total_recv)
-        .network(config.network_optimization)
+    b.network(config.network_optimization)
         .build()
         .context("Error building protocol configuration")
 }
 
 pub fn get_total_sent_recv_max(config: &NotarisationConfig) -> (usize, usize) {
+    let n = config.max_req_num_sent;
+
+    let req = config.max_single_request_size;
+    let rsp = config.max_single_response_size;
+
     if matches!(config.mode, crate::args::SessionMode::OneShot) {
         // --- One‑shot: exact, per‑round sizing --------------------------------
         //
         // We create a new protocol instance per request. We already know (or can
         // compute) precise sizes for this single request/response.
         // This is done before we invoke the setup.
-        (
-            config.max_single_request_size,
-            config.max_single_response_size,
-        )
+        // This is the largest overhead given the number of requests
+        // Note that only the last channel will have such size.
+        (req * n + rsp * (n - 1), rsp)
     } else {
         // --- Multi‑round: stateless model API; sizes grow with history ----------
         //
@@ -139,11 +143,8 @@ pub fn get_total_sent_recv_max(config: &NotarisationConfig) -> (usize, usize) {
         // bytes across the session follow an arithmetic series that simplifies to:
         //
         //   total_sent_estimate = (req * (n - 1) * n + rsp * (n - 1) * (n - 2)) / 2
-        let n = config.max_req_num_sent;
-        let req = config.max_single_request_size;
-        let rsp = config.max_single_response_size;
 
-        let total_sent_max = ((req * (n - 1) * n) + rsp * (n - 1) * (n - 2)) / 2;
+        let total_sent_max = ((req * (n + 1) * n) + rsp * (n - 1) * n) / 2;
 
         let total_recv_max = rsp * n;
 
@@ -219,11 +220,19 @@ async fn setup_remote_notary(config: &NotarisationConfig) -> Result<NotaryConnec
     // total channel caps (bytes) — computed from mode/rounds
     let (total_sent, total_recv) = get_total_sent_recv_max(config);
 
-    let req = NotarizationRequest::builder()
-        .max_sent_data(total_sent)
-        .max_recv_data(total_recv)
-        .build()
-        .context("building notarization request")?;
+    let mut req_builder = NotarizationRequest::builder();
+
+    let req = if matches!(config.mode, crate::args::SessionMode::MultiRound) {
+        req_builder
+            .max_sent_data(total_sent)
+            .max_recv_data(total_recv)
+    } else {
+        req_builder
+            .max_sent_data(config.max_single_request_size)
+            .max_recv_data(config.max_single_response_size)
+    }
+    .build()
+    .context("building notarization request")?;
 
     match notary_client
         .request_notarization(req)

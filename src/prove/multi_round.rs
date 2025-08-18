@@ -9,12 +9,15 @@ use dialoguer::console::style;
 use tracing::{debug, info};
 
 pub(crate) async fn run_multi_round_prove(app_config: &ProveConfig) -> anyhow::Result<()> {
-    let (prover_task, mut request_sender) =
-        with_spinner_future("Please wait while the system is setup", setup(app_config)).await?;
+    let (prover_task, mut request_sender) = with_spinner_future(
+        "Please wait while the system is setup...",
+        setup(app_config),
+    )
+    .await?;
 
     let mut messages = vec![];
 
-    loop {
+    for _counter in 0..app_config.notarisation_config.max_req_num_sent {
         let stop = single_interaction_round(&mut request_sender, app_config, &mut messages).await?;
 
         if stop {

@@ -33,7 +33,7 @@ pub(crate) fn try_read_user_input_from_ctx() -> Option<anyhow::Result<Option<Str
         .ok()
 }
 
-pub(crate) struct StdinInputSource;
+pub struct StdinInputSource;
 
 impl InputSource for StdinInputSource {
     fn next(&mut self) -> anyhow::Result<Option<String>> {
