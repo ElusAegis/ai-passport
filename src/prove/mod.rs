@@ -2,7 +2,7 @@ mod live_interact;
 mod multi_round;
 mod notarise;
 mod one_shot;
-pub(crate) mod setup;
+pub mod setup;
 mod share;
 
 use crate::args::SessionMode;

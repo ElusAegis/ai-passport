@@ -91,15 +91,16 @@ impl NotaryConfig {
 }
 
 #[derive(Builder, Clone)]
+#[builder(pattern = "owned")]
 pub struct NotarisationConfig {
     /// Notary configuration
     pub(crate) notary_config: NotaryConfig,
     /// Maximum expected number of requests to send
     pub(crate) max_req_num_sent: usize,
     /// Maximum number of bytes in a user prompt
-    pub(crate) max_single_request_size: usize,
+    pub max_single_request_size: usize,
     /// Maximum number of bytes in the response
-    pub(crate) max_single_response_size: usize,
+    pub max_single_response_size: usize,
     /// Network optimization strategy
     #[builder(default)]
     pub(crate) network_optimization: NetworkSetting,
@@ -116,6 +117,16 @@ pub struct NotarisationConfig {
 impl NotarisationConfig {
     pub fn builder() -> NotarisationConfigBuilder {
         NotarisationConfigBuilder::default()
+    }
+
+    pub fn create_builder(&self) -> NotarisationConfigBuilder {
+        NotarisationConfigBuilder::default()
+            .notary_config(self.notary_config.clone())
+            .max_req_num_sent(self.max_req_num_sent)
+            .max_single_request_size(self.max_single_request_size)
+            .max_single_response_size(self.max_single_response_size)
+            .network_optimization(self.network_optimization)
+            .mode(self.mode)
     }
 }
 

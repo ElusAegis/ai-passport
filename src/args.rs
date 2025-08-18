@@ -34,7 +34,7 @@ impl Display for SessionMode {
     }
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Copy, Debug, Serialize, Deserialize)]
 pub enum NotaryMode {
     Ephemeral,
     RemoteNonTLS,
