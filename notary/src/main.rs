@@ -64,7 +64,7 @@ fn main() -> Result<()> {
     cmd.arg("run")
         .arg("--init")
         .arg("--rm")
-        .args(["-p", &format!("127.0.0.1:{}:7047", args.host_port)]);
+        .args(["-p", &format!("{}:7047", args.host_port)]);
 
     let mut vol = format!("{}:/root/.notary", display_path(&cfg_file));
     if args.readonly {
