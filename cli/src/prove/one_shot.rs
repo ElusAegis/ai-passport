@@ -14,25 +14,33 @@ use tracing::{debug, info};
 pub(crate) async fn run_one_shot_prove(app_config: &ProveConfig) -> Result<()> {
     let app_max_single_request_size = app_config.notarisation_config.max_single_request_size;
     let app_max_single_response_size = app_config.notarisation_config.max_single_response_size;
+    let max_req_num = app_config.notarisation_config.max_req_num_sent;
+
+    let spawn_setup =
+        |app_config: ProveConfig| tokio::spawn(async move { setup(&app_config).await });
 
     let mut stored_proofs = Vec::<PathBuf>::new();
 
     // Set up the current instance of the prover
     let cloned_app_config = app_config.clone();
     let mut current_instance_handle: JoinHandle<Result<ProverWithRequestSender>> =
-        tokio::spawn(async move { setup(&cloned_app_config).await });
+        spawn_setup(cloned_app_config);
 
     // Set up the future instance of the prover
     let mut cloned_app_config = app_config.clone();
     cloned_app_config
         .notarisation_config
         .max_single_request_size += app_max_single_request_size + app_max_single_response_size;
-    let mut future_instance_handle: JoinHandle<Result<ProverWithRequestSender>> =
-        tokio::spawn(async move { setup(&cloned_app_config).await });
+    let mut future_instance_handle: Option<JoinHandle<Result<ProverWithRequestSender>>> =
+        if max_req_num > 1 {
+            Some(spawn_setup(cloned_app_config))
+        } else {
+            None
+        };
 
     let mut messages: Vec<Value> = vec![];
 
-    for counter in 0..app_config.notarisation_config.max_req_num_sent {
+    for counter in 0..max_req_num {
         // Wait for the current instance to be ready
         let mut current_instance = current_instance_handle.await??;
 
@@ -58,13 +66,14 @@ pub(crate) async fn run_one_shot_prove(app_config: &ProveConfig) -> Result<()> {
             &app_config.model_config.model_id,
         )?);
 
-        // Prepare for the next iteration
-        current_instance_handle = future_instance_handle;
-
         // If we are processing the last request, we can exit early
-        if counter + 1 >= app_config.notarisation_config.max_req_num_sent {
+        if counter + 1 >= max_req_num {
             break;
         }
+
+        // Prepare for the next iteration
+        current_instance_handle =
+            future_instance_handle.context("Future notarization instance does not exist")?;
 
         // Set up the next instance
         let mut cloned_app_config = app_config.clone();
@@ -78,7 +87,11 @@ pub(crate) async fn run_one_shot_prove(app_config: &ProveConfig) -> Result<()> {
             .max_single_request_size =
             message_byte_size + app_max_single_request_size + app_max_single_response_size;
 
-        future_instance_handle = tokio::spawn(async move { setup(&cloned_app_config).await });
+        future_instance_handle = if counter < max_req_num {
+            Some(spawn_setup(cloned_app_config))
+        } else {
+            None
+        };
     }
 
     if !stored_proofs.is_empty() {
