@@ -1,4 +1,4 @@
-use crate::prove::live_interact::single_interaction_round;
+use crate::prove::live_interact::{send_connection_close, single_interaction_round};
 use crate::prove::notarise::notarise_session;
 use crate::prove::setup::setup;
 use crate::prove::share::store_interaction_proof_to_file;
@@ -6,7 +6,6 @@ use crate::utils::spinner::with_spinner_future;
 use crate::ProveConfig;
 use anyhow::Context;
 use dialoguer::console::style;
-use futures::FutureExt;
 use tracing::{debug, info};
 
 pub(crate) async fn run_multi_round_prove(app_config: &ProveConfig) -> anyhow::Result<()> {
@@ -18,12 +17,21 @@ pub(crate) async fn run_multi_round_prove(app_config: &ProveConfig) -> anyhow::R
 
     let mut messages = vec![];
 
-    for _counter in 0..app_config.notarisation_config.max_req_num_sent {
-        let stop = single_interaction_round(&mut request_sender, app_config, &mut messages).await?;
+    let was_stopped = false;
+    for _ in 0..app_config.notarisation_config.max_req_num_sent {
+        let was_stopped =
+            single_interaction_round(&mut request_sender, app_config, &mut messages).await?;
 
-        if stop {
+        if was_stopped {
             break;
         }
+    }
+
+    if !was_stopped {
+        // If the interaction was not stopped, send a connection close request
+        send_connection_close(&mut request_sender, &app_config.model_config)
+            .await
+            .context("failed to send close request")?;
     }
 
     // Notarize the session
