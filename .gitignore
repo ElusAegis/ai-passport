@@ -3,5 +3,6 @@
 /model/*.json
 !/model/input.json
 /.env
-model_ips/*_interaction_proof.json
+proofs/*_interaction_proof.json
 
+model-server/cert/*

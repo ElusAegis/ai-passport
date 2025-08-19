@@ -6,6 +6,7 @@ use crate::utils::spinner::with_spinner_future;
 use crate::ProveConfig;
 use anyhow::Context;
 use dialoguer::console::style;
+use futures::FutureExt;
 use tracing::{debug, info};
 
 pub(crate) async fn run_multi_round_prove(app_config: &ProveConfig) -> anyhow::Result<()> {

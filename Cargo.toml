@@ -1,41 +1,53 @@
-[package]
-name = "passport-for-ai"
-version = "0.2.0"
+[workspace]
+members = [
+    "cli",
+    "model-server",
+    "notary",
+]
+resolver = "2"
+
+[workspace.package]
 edition = "2021"
-default-run = "passport-for-ai"
 
-[lib]
-name = "passport_for_ai"
+# One source of truth for versions & common features
+[workspace.dependencies]
+# --- Core & utils ---
+anyhow = "1"
+derive_builder = "0.20.2"
+hex = "0.4.3"
+dotenvy = "0.15.7"
 
-[dependencies]
-# --- CLI & Config ---
-clap = { version = "4.0", features = ["derive", "env"] }
+# --- CLI & UX ---
+clap = { version = "4.5", features = ["derive", "env"] }
 dialoguer = { version = "0.11.0", features = ["fuzzy-select"] }
-dotenvy = { version = "0.15.7" }
 indicatif = "0.18.0"
 
-# --- Serialization ---
+# --- Async ---
+tokio = { version = "1.40", features = ["rt", "rt-multi-thread", "macros"] }
+tokio-util = "0.7"
+futures = "0.3"
+
+# --- Time & data ---
+chrono = { version = "0.4", features = ["alloc", "now"], default-features = false }
+
+# --- Serde ---
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 
-# --- Async Runtime & Utilities ---
-tokio = { version = "1.40", features = ["rt", "rt-multi-thread", "macros"] }
-tokio-util = { version = "0.7" }
-futures = { version = "0.3" }
-
-# --- Time & Data ---
-chrono = { version = "0.4", features = ["alloc", "now"], default-features = false }
+# --- Logging ---
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt"] }
 
 # --- Crypto ---
-k256 = { version = "0.13" }
+k256 = "0.13"
 
-# --- Networking (HTTP) ---
+# --- HTTP client stack (passport-for-ai) ---
 hyper = { version = "1.6", features = ["client", "http1"] }
 hyper-util = { version = "0.1", features = ["full"] }
-http-body-util = { version = "0.1" }
+http-body-util = "0.1"
 hyper-rustls = { version = "0.27", features = ["http1", "native-tokio"] }
 
-# --- TLSNotary stack ---
+# --- TLSNotary (git) ---
 tlsn-core = { git = "https://github.com/tlsnotary/tlsn", tag = "v0.1.0-alpha.12" }
 tlsn-prover = { git = "https://github.com/tlsnotary/tlsn", tag = "v0.1.0-alpha.12" }
 tlsn-verifier = { git = "https://github.com/tlsnotary/tlsn", tag = "v0.1.0-alpha.12" }
@@ -44,26 +56,16 @@ tlsn-common = { git = "https://github.com/tlsnotary/tlsn", tag = "v0.1.0-alpha.1
 notary-client = { git = "https://github.com/tlsnotary/tlsn", tag = "v0.1.0-alpha.12" }
 spansy = { git = "https://github.com/tlsnotary/tlsn-utils", rev = "6168663" }
 
-# --- Logging ---
-tracing = { version = "0.1" }
-tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+# --- Server stack (dummy-model-server) ---
+axum = "0.8.4"
+axum-server = { version = "0.7.2", features = ["tls-rustls"] }
+rustls = "0.23.31"
+rustls-pemfile = "2.2.0"
+tower-http = { version = "0.6.6", features = ["cors", "trace"] }
 
-# --- Miscellaneous ---
-anyhow = "1.0"
-derive_builder = { version = "0.20.2" }
-hex = "0.4.3"
-
-[dev-dependencies]
-criterion = { version = "0.7.0" }
+# --- Dev ---
+criterion = "0.7.0"
 rand = "0.9.1"
-
-[features]
-ephemeral-notary = []
-
-[[bin]]
-name = "passport-for-ai"
-path = "src/bin/passport_for_ai.rs"
-
-[[bench]]
-name = "prove_bench"
-harness = false
+uuid = { version = "1", features = ["v4"] }
+subtle = "2.6.1"
+time = "0.3"

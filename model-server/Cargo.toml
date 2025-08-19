@@ -1,0 +1,26 @@
+[package]
+name = "model-server"
+version = "0.1.0"
+edition.workspace = true
+
+[dependencies]
+# --- Error handling & utilities ---
+anyhow = { workspace = true }
+dotenvy = { workspace = true }
+subtle = { workspace = true }
+time = { workspace = true }
+uuid = { workspace = true }
+
+# --- Async runtime & server ---
+axum = { workspace = true }
+axum-server = { workspace = true }
+rustls = { workspace = true }
+rustls-pemfile = { workspace = true }
+tokio = { workspace = true }
+tower-http = { workspace = true }
+
+# --- Serialization ---
+serde = { workspace = true }
+
+# --- Tracing & logging ---
+tracing-subscriber = { workspace = true }

@@ -1,12 +1,12 @@
+use anyhow::bail;
 use criterion::{criterion_group, criterion_main, Criterion, SamplingMode, Throughput};
-use rand::distr::Alphanumeric;
-use rand::Rng;
-use std::time::Duration;
-
 use passport_for_ai::{
     get_total_sent_recv_max, run_prove, with_input_source, InputSource, ModelConfig,
     NotarisationConfig, NotaryConfig, NotaryMode, PrivacyConfig, ProveConfig, SessionMode,
 };
+use rand::distr::Alphanumeric;
+use rand::Rng;
+use std::time::Duration;
 use tlsn_common::config::NetworkSetting;
 
 // ───────────────────────────────────────────────────────────────────────────────
@@ -103,7 +103,7 @@ fn notary_presets() -> Vec<NotaryPreset> {
             version_path: "",
             mode: NotaryMode::RemoteNonTLS,
             caps: NotaryCaps {
-                max_sent_bytes: 64 * KIB,
+                max_sent_bytes: 4 * KIB,
                 max_recv_bytes: 16 * KIB,
             },
         },
@@ -134,7 +134,7 @@ fn pairings() -> Vec<(ModelPreset, NotaryPreset)> {
         .find(|m| m.name == "poa-local")
         .unwrap()
         .clone();
-    let _redpill = models
+    let redpill = models
         .iter()
         .find(|m| m.name == "redpill-remote")
         .unwrap()
@@ -145,15 +145,15 @@ fn pairings() -> Vec<(ModelPreset, NotaryPreset)> {
         .find(|n| n.name == "notary-local")
         .unwrap()
         .clone();
-    let _notary_pse = notaries
+    let notary_pse = notaries
         .iter()
         .find(|n| n.name == "notary-pse")
         .unwrap()
         .clone();
 
     vec![
-        (poa_local, notary_local),
-        // (redpill, notary_pse)
+        // (poa_local, notary_local),
+        (redpill, notary_pse),
     ]
 }
 
@@ -171,21 +171,23 @@ fn prompt_bytes(n: usize) -> String {
 }
 
 /// N prompts (of ~req_bytes) then a terminating None (exit).
-fn make_inputs(n_msgs: usize, req_bytes: usize) -> Vec<Option<String>> {
+fn make_inputs(n_msgs: usize, req_bytes: usize) -> anyhow::Result<Vec<Option<String>>> {
     const PACKAGE_OVERHEAD: usize = 600;
 
     // Ensure we have enough bytes for the request, accounting for overhead
     if req_bytes < PACKAGE_OVERHEAD {
-        panic!(
+        bail!(
             "Request size must be at least {} bytes to account for overhead.",
             PACKAGE_OVERHEAD
         );
     }
 
-    (0..n_msgs)
+    let inputs = (0..n_msgs)
         .map(|_| Some(prompt_bytes(req_bytes - PACKAGE_OVERHEAD)))
         .chain(std::iter::once(None))
-        .collect()
+        .collect();
+
+    Ok(inputs)
 }
 
 // ───────────────────────────────────────────────────────────────────────────────
@@ -297,6 +299,10 @@ pub fn prove_benchmarks(c: &mut Criterion) {
                         None => continue,
                     };
 
+                    let Ok(input) = make_inputs(num_inputs, max_request_size) else {
+                        continue;
+                    };
+
                     let bid = format!(
                         "{}+{}-{:?}-{:?}---{}(up)-{}(down)-{}(msg)-{}(max-msg)",
                         model.name,
@@ -319,8 +325,7 @@ pub fn prove_benchmarks(c: &mut Criterion) {
                     group.bench_with_input(bid.clone(), &num_inputs, |b, &_| {
                         b.iter(|| {
                             rt.block_on(async {
-                                let src =
-                                    VecInputSource::new(make_inputs(num_inputs, max_request_size));
+                                let src = VecInputSource::new(input.clone());
                                 with_input_source(src, async {
                                     let _ = run_prove(&cfg).await.map_err(|e| {
                                         println!(

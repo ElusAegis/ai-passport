@@ -160,7 +160,7 @@ pub fn setup_ephemeral_notary(
     let (prover_sock, notary_sock) = tokio::io::duplex(1 << 16);
 
     // Load the notary signing key
-    let signing_key_str = include_str!("../../tlsn/ephemeral_notary.key");
+    let signing_key_str = include_str!("../../fixtures/ephemeral_notary.key");
     let signing_key = SecretKey::from_pkcs8_pem(signing_key_str)
         .context("Failed to parse Notary key")?
         .to_bytes();

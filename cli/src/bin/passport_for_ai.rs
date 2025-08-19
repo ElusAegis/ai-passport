@@ -6,7 +6,7 @@ use tracing::level_filters::LevelFilter;
 use tracing_subscriber::filter::Targets;
 use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::util::SubscriberInitExt;
-use tracing_subscriber::{fmt, EnvFilter, Layer};
+use tracing_subscriber::{EnvFilter, Layer};
 
 #[tokio::main]
 async fn main() -> Result<()> {
@@ -19,25 +19,24 @@ async fn main() -> Result<()> {
     application.run().await
 }
 
-pub fn init_logging() -> Result<()> {
-    // Plain, no-frills layer (only for target = "plain")
-    let plain_fmt = fmt::format()
+fn init_logging() -> anyhow::Result<()> {
+    // plain layer (only target="plain")
+    let plain_fmt = tracing_subscriber::fmt::format()
         .without_time()
         .with_level(false)
         .with_target(false)
         .compact();
-
-    // Only handle events with target="plain"
-    let plain_layer = fmt::layer()
+    let plain_layer = tracing_subscriber::fmt::layer()
         .event_format(plain_fmt)
         .with_filter(Targets::new().with_target("plain", LevelFilter::TRACE));
 
-    // Normal, rich formatting for everything else (env controlled)
-    let rich_layer = fmt::layer().with_filter(
-        EnvFilter::from_default_env()
-            .add_directive("warn".parse()?) // default WARN+
-            .add_directive("passport_for_ai=info".parse()?), // your crate at INFO
-    );
+    // build filter: use RUST_LOG if provided; otherwise default
+    let filter = EnvFilter::try_from_default_env().unwrap_or_else(|_| {
+        // sensible fallback; you can keep INFO for your crate here
+        EnvFilter::new("warn,passport_for_ai=info")
+    });
+
+    let rich_layer = tracing_subscriber::fmt::layer().with_filter(filter);
 
     tracing_subscriber::registry()
         .with(plain_layer)
@@ -47,7 +46,7 @@ pub fn init_logging() -> Result<()> {
     Ok(())
 }
 
-pub fn print_welcome() {
+fn print_welcome() {
     let sep = style("◆").blue().bold();
     let title = style("Welcome to the Proofs-of-Autonomy CLI").bold();
     let subtitle = style("Create and verify cryptographic proofs of model conversations.").dim();

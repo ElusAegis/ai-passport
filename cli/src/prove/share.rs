@@ -9,7 +9,7 @@ use tlsn_core::transcript::TranscriptProof;
 use tlsn_core::{CryptoProvider, Secrets};
 use tlsn_formats::http::HttpTranscript;
 
-const PROOFS_DIR: &str = "model_ips";
+const PROOFS_DIR: &str = "proofs";
 
 pub(super) fn store_interaction_proof_to_file(
     postfix: &str,
@@ -27,7 +27,7 @@ pub(super) fn store_interaction_proof_to_file(
         .context("building presentation")?;
 
     // 3) Ensure proofs/ exists and construct the output file path
-    ensure_dir(PROOFS_DIR).context("creating model_ips/ directory")?;
+    ensure_dir(PROOFS_DIR).context("creating proofs/ directory")?;
     let file_path = proof_path(PROOFS_DIR, model_id, postfix);
 
     // 4) Serialize and write JSON
