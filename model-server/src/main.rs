@@ -97,7 +97,7 @@ impl Config {
     fn from_env() -> anyhow::Result<Self> {
         dotenvy::dotenv().ok();
 
-        let bind_addr: SocketAddr = "127.0.0.1:"
+        let bind_addr: SocketAddr = "0.0.0.0:"
             .to_string()
             .add(
                 env::var("MODEL_API_PORT")
