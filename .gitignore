@@ -6,3 +6,4 @@
 proofs/*_interaction_proof.json
 
 model-server/cert/*
+/notary/tls/
