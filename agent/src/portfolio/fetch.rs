@@ -24,7 +24,7 @@ pub async fn fetch_current() -> Portfolio {
             basis_usd: Some(1.0),
         },
         Position {
-            symbol: "GOLD".into(),
+            symbol: "PAXG".into(),
             amount: 2.0,
             basis_usd: Some(1_950.0),
         },

@@ -1,3 +1,4 @@
+pub(crate) mod coingeko;
 pub(crate) mod context;
 pub(crate) mod enrich;
 
@@ -34,7 +35,7 @@ impl PriceProvider for DummyPriceProvider {
                 "ETH" => 2_900.0,
                 "SOL" => 145.0,
                 "USDT" => 1.0,
-                "GOLD" | "XAU" => 2_350.0,
+                "PAXG" | "XAU" => 2_350.0,
                 _ => 0.0,
             };
             m.insert(

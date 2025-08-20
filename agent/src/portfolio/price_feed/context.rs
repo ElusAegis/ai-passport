@@ -41,10 +41,10 @@ recent-updates elsewhere. Use your own world knowledge and price feeds if prices
         .map(|p| {
             json!({
                 "sym": p.symbol,
-                "amt": p.amount,
-                "px":  p.price_usd,
-                "val": p.value_usd,
-                "bs":  p.basis_usd,
+                "amt": (p.amount * 10000.0).round() / 10000.0,
+                "px":  (p.price_usd * 1000.0).round() / 1000.0,
+                "val": p.value_usd.round(),
+                "bs":  (p.basis_usd.map(|bu| (bu * 1000.0_f64.round()) / 1000.0)),
                 "cls": classify_symbol(&p.symbol)
             })
         })
@@ -81,7 +81,7 @@ recent-updates elsewhere. Use your own world knowledge and price feeds if prices
         "pf": {
             "pos": positions_json,
             "agg": { "by_cls": by_cls },
-            "tv": tv
+            "tv": tv.round(),
         }
     });
 

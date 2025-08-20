@@ -1,9 +1,11 @@
+#![feature(assert_matches)]
+
 use crate::polymarket::agent_msg::build_polymarket_context;
 use crate::polymarket::fetch::Market;
 use crate::portfolio::fetch::fetch_current;
+use crate::portfolio::price_feed::coingeko::CoingeckoProvider;
 use crate::portfolio::price_feed::context::build_portfolio_context;
 use crate::portfolio::price_feed::enrich::with_prices;
-use crate::portfolio::price_feed::DummyPriceProvider;
 use crate::utils::logging::init_logging;
 
 mod model;
@@ -22,7 +24,7 @@ async fn main() -> anyhow::Result<()> {
     println!("{}", build_polymarket_context(&markets, 16 * 1024)?);
 
     let portfolio = fetch_current().await;
-    let provider = DummyPriceProvider;
+    let provider = CoingeckoProvider::new();
 
     // later: swap DummyPriceProvider for Coingecko/Binance impl
     let priced = with_prices(&portfolio, &provider).await?;
