@@ -2,7 +2,10 @@ use crate::polymarket::agent_msg::build_polymarket_context;
 use crate::polymarket::fetch::Market;
 use crate::utils::logging::init_logging;
 
-mod market_data;
+mod model;
+mod polymarket;
+mod portfolio;
+mod price_feed;
 mod utils;
 
 #[tokio::main]
