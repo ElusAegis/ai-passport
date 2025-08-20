@@ -65,7 +65,7 @@ pub(crate) async fn run_multi(app_config: &ProveConfig) -> Result<()> {
         // Save the proof to a file
         stored_proofs.push(save_to_file(
             format!(
-                "{}_part_{counter}_one_shot_interaction_proof",
+                "{}_part_{counter}_multi_setup_interaction_proof",
                 &app_config.model.model_id
             )
             .as_str(),

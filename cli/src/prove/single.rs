@@ -50,7 +50,7 @@ pub(crate) async fn run_single(app_config: &ProveConfig) -> anyhow::Result<()> {
     // Save the proof to a file
     let file_path = save_to_file(
         &format!(
-            "{}_multi_round_interaction_proof",
+            "{}_single_setup_interaction_proof",
             app_config.model.model_id
         ),
         &attestation,
