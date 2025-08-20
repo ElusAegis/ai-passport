@@ -60,3 +60,19 @@ impl InputSource for StdinInputSource {
         }
     }
 }
+
+pub struct VecInputSource {
+    buf: std::vec::IntoIter<Option<String>>,
+}
+impl VecInputSource {
+    pub fn new(lines: Vec<Option<String>>) -> Self {
+        Self {
+            buf: lines.into_iter(),
+        }
+    }
+}
+impl InputSource for VecInputSource {
+    fn next(&mut self) -> anyhow::Result<Option<String>> {
+        Ok(self.buf.next().flatten())
+    }
+}

@@ -1,31 +1,12 @@
 use ai_passport::{
-    run_prove, with_input_source, InputSource, ModelConfig, NotaryConfig, NotaryMode,
-    PrivacyConfig, ProveConfig, ServerConfig, SessionConfig, SessionMode,
+    run_prove, with_input_source, ModelConfig, NotaryConfig, NotaryMode,
+    PrivacyConfig, ProveConfig, ServerConfig, SessionConfig, SessionMode, VecInputSource,
 };
 use criterion::{criterion_group, criterion_main, Criterion, SamplingMode, Throughput};
 use rand::distr::Alphanumeric;
 use rand::Rng;
 use std::time::Duration;
 use tlsn_common::config::NetworkSetting;
-
-// ───────────────────────────────────────────────────────────────────────────────
-// Input source (task-local DI)
-// ───────────────────────────────────────────────────────────────────────────────
-struct VecInputSource {
-    buf: std::vec::IntoIter<Option<String>>,
-}
-impl VecInputSource {
-    pub fn new(lines: Vec<Option<String>>) -> Self {
-        Self {
-            buf: lines.into_iter(),
-        }
-    }
-}
-impl InputSource for VecInputSource {
-    fn next(&mut self) -> anyhow::Result<Option<String>> {
-        Ok(self.buf.next().flatten())
-    }
-}
 
 // ───────────────────────────────────────────────────────────────────────────────
 // Presets and pairings

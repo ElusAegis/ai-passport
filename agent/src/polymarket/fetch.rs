@@ -14,8 +14,6 @@ pub(crate) struct Market {
     pub(crate) question: Option<String>,
     pub(crate) slug: Option<String>,
     pub(crate) endDate: Option<String>,
-    pub(crate) startDate: Option<String>,
-    pub(crate) description: Option<String>,
 
     // Often numbers encoded as strings; accept number or string
     #[serde(default, deserialize_with = "de_opt_f64")]

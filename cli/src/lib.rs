@@ -15,4 +15,4 @@ pub use config::{
 pub use prove::run_prove;
 pub use tlsn::{notarise, save_proof, setup};
 pub use tlsn_common::config::NetworkSetting;
-pub use utils::io_input::{with_input_source, InputSource, StdinInputSource};
+pub use utils::io_input::{with_input_source, InputSource, StdinInputSource, VecInputSource};

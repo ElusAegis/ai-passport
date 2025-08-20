@@ -129,7 +129,7 @@ pub fn build_polymarket_context(markets: &[Market], max_bytes: usize) -> anyhow:
     });
 
     // Convert to compact payload
-    let mut pxm: Vec<PxMarket> = ranked
+    let pxm: Vec<PxMarket> = ranked
         .iter()
         .map(|m| {
             let q_short = m

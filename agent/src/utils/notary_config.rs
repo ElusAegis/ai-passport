@@ -4,7 +4,7 @@ use ai_passport::{
 };
 use anyhow::Context;
 
-pub(crate) fn gen_config() -> anyhow::Result<ProveConfig> {
+pub(crate) fn gen_cfg(request_limit: usize, response_limit: usize) -> anyhow::Result<ProveConfig> {
     let server_config = ServerConfig::builder()
         .domain("api.proof-of-autonomy.elusaegis.xyz".to_string())
         .port(3000_u16)
@@ -20,10 +20,10 @@ pub(crate) fn gen_config() -> anyhow::Result<ProveConfig> {
         .expect("model_config");
 
     let session_config = SessionConfig::builder()
-        .max_msg_num(4)
-        .max_single_request_size(1024)
-        .max_single_response_size(1024)
-        .mode(SessionMode::Multi)
+        .max_msg_num(1)
+        .max_single_request_size(request_limit)
+        .max_single_response_size(response_limit)
+        .mode(SessionMode::Single)
         .build()
         .expect("session_config");
 
