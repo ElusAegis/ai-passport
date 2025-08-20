@@ -12,25 +12,10 @@ mod utils;
 async fn main() -> anyhow::Result<()> {
     init_logging();
 
-
-    let url = "https://gamma-api.polymarket.com/markets?limit=4&order=total-volume&ascending=false&active=true&closed=false&volume_num_min=50000";
-    let client = Client::new();
-    let resp = client
-        .get(url)
-        .header("accept", "application/json")
-        .send()
-        .await
-        .with_context(|| "failed to send request")?
-        .error_for_status()
-        .with_context(|| "non-success status from Polymarket")?;
-
-    // Read the full body as bytes
-    let bytes = resp.bytes().await?;
-    println!("Total response size: {} bytes", bytes.len());
-
-    // The API returns a JSON array at the top level
-    let markets: Vec<Market> = serde_json::from_slice(&bytes)
-        .with_context(|| "failed to parse Polymarket response as Vec<Market>")?;
+    // This fetch does not use TLSN because the data is public and contains no sensitive information.
+    // Instead, the notary can directly perform the request and sign off on the result,
+    // which provides simpler and sufficient proof.
+    let markets = Market::get(10).await?;
 
     // Print the extracted fields for all objects
     for (i, m) in markets.iter().enumerate() {
@@ -56,6 +41,11 @@ async fn main() -> anyhow::Result<()> {
         );
         println!();
     }
+    //
+    //     OBJECTIVE 1) Summarize sentiment; 2) Note notable signals & drivers; 3) Provide portfolio actions. Reply JSON:
+    // {\"summary\":str,\"observations\":[{\"slug\":str,\"sentiment\":\"bullish|bearish|neutral\",\"why\":str,\"conf\":0..1}],\"portfolio\":str}
+
+    println!("{}", build_polymarket_context(&markets, 16 * 1024)?);
 
     Ok(())
 }
