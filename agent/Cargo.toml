@@ -18,3 +18,4 @@ tracing-subscriber = { workspace = true }
 
 # --- Networking (HTTP) ---
 reqwest = { version = "0.12.23", features = ["json", "gzip", "brotli", "deflate"] }
+async-trait = "0.1.88"

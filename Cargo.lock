@@ -80,6 +80,7 @@ version = "0.1.0"
 dependencies = [
  "ai-passport",
  "anyhow",
+ "async-trait",
  "chrono",
  "reqwest",
  "serde",
