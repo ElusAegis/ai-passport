@@ -1,4 +1,5 @@
 use crate::market_data::Market;
+use crate::utils::logging::init_logging;
 use anyhow::Context;
 use reqwest::Client;
 
@@ -13,6 +14,8 @@ async fn main() -> anyhow::Result<()> {
         .with_target(false)
         .without_time()
         .init();
+    init_logging();
+
 
     let url = "https://gamma-api.polymarket.com/markets?limit=4&order=total-volume&ascending=false&active=true&closed=false&volume_num_min=50000";
     let client = Client::new();
