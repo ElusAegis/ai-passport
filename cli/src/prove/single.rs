@@ -1,24 +1,28 @@
+use crate::config::ProveConfig;
 use crate::prove::live_interact::{send_connection_close, single_interaction_round};
 use crate::prove::notarise::notarise_session;
-use crate::prove::setup::setup;
-use crate::prove::share::store_interaction_proof_to_file;
+use crate::tlsn::save_proof::save_to_file;
+use crate::tlsn::setup::setup;
 use crate::utils::spinner::with_spinner_future;
-use crate::ProveConfig;
 use anyhow::Context;
 use dialoguer::console::style;
 use tracing::{debug, info};
 
-pub(crate) async fn run_multi_round_prove(app_config: &ProveConfig) -> anyhow::Result<()> {
+pub(crate) async fn run_single(app_config: &ProveConfig) -> anyhow::Result<()> {
     let (prover_task, mut request_sender) = with_spinner_future(
         "Please wait while the system is setup...",
-        setup(app_config),
+        setup(
+            &app_config.notary,
+            &app_config.model.server.domain,
+            app_config.model.server.port,
+        ),
     )
     .await?;
 
     let mut messages = vec![];
 
     let was_stopped = false;
-    for _ in 0..app_config.notarisation_config.max_req_num_sent {
+    for _ in 0..app_config.session.max_msg_num {
         let was_stopped =
             single_interaction_round(&mut request_sender, app_config, &mut messages).await?;
 
@@ -29,7 +33,7 @@ pub(crate) async fn run_multi_round_prove(app_config: &ProveConfig) -> anyhow::R
 
     if !was_stopped {
         // If the interaction was not stopped, send a connection close request
-        send_connection_close(&mut request_sender, &app_config.model_config)
+        send_connection_close(&mut request_sender, &app_config.model)
             .await
             .context("failed to send close request")?;
     }
@@ -44,12 +48,14 @@ pub(crate) async fn run_multi_round_prove(app_config: &ProveConfig) -> anyhow::R
     .context("Error notarizing the session")?;
 
     // Save the proof to a file
-    let file_path = store_interaction_proof_to_file(
-        "multi_round",
+    let file_path = save_to_file(
+        &format!(
+            "{}_multi_round_interaction_proof",
+            app_config.model.model_id
+        ),
         &attestation,
-        &app_config.privacy_config,
+        &app_config.privacy,
         &secrets,
-        &app_config.model_config.model_id,
     )?;
 
     info!(target: "plain",

@@ -1,4 +1,4 @@
-use crate::config::PrivacyConfig;
+use crate::config::privacy::PrivacyConfig;
 use anyhow::{Context, Result};
 use std::collections::HashSet;
 use std::fs;
@@ -11,12 +11,11 @@ use tlsn_formats::http::HttpTranscript;
 
 const PROOFS_DIR: &str = "proofs";
 
-pub(super) fn store_interaction_proof_to_file(
-    postfix: &str,
+pub fn save_to_file(
+    name: &str,
     attestation: &Attestation,
     privacy_config: &PrivacyConfig,
     secrets: &Secrets,
-    model_id: &str,
 ) -> Result<PathBuf> {
     // 1) Build transcript proof with selective disclosure
     let transcript_proof =
@@ -28,7 +27,7 @@ pub(super) fn store_interaction_proof_to_file(
 
     // 3) Ensure proofs/ exists and construct the output file path
     ensure_dir(PROOFS_DIR).context("creating proofs/ directory")?;
-    let file_path = proof_path(PROOFS_DIR, model_id, postfix);
+    let file_path = proof_path(PROOFS_DIR, name);
 
     // 4) Serialize and write JSON
     let json =
@@ -109,10 +108,10 @@ fn ensure_dir<P: AsRef<Path>>(dir: P) -> Result<()> {
     fs::create_dir_all(&dir).with_context(|| format!("mkdir -p {}", dir.as_ref().display()))
 }
 
-fn proof_path(dir: &str, model_id: &str, postfix: &str) -> PathBuf {
+fn proof_path(dir: &str, name: &str) -> PathBuf {
     let ts = unix_ts();
-    let model = sanitize_model_id(model_id);
-    let filename = format!("{model}_{ts}_{postfix}_interaction_proof.json");
+    let prefix = sanitize_prefix(name);
+    let filename = format!("{prefix}_{ts}.json");
     Path::new(dir).join(filename)
 }
 
@@ -124,6 +123,6 @@ fn unix_ts() -> u64 {
         .as_secs()
 }
 
-fn sanitize_model_id(s: &str) -> String {
+fn sanitize_prefix(s: &str) -> String {
     s.replace([' ', '/'], "_")
 }

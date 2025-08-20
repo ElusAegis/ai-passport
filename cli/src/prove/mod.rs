@@ -1,14 +1,11 @@
 mod live_interact;
-mod multi_round;
+mod multi;
 mod notarise;
-mod one_shot;
-pub mod setup;
-mod share;
+mod single;
 
-use crate::args::SessionMode;
-use crate::config::ProveConfig;
-use crate::prove::multi_round::run_multi_round_prove;
-use crate::prove::one_shot::run_one_shot_prove;
+use crate::config::{ProveConfig, SessionMode};
+use crate::prove::multi::run_multi;
+use crate::prove::single::run_single;
 use anyhow::Result;
 use hyper::client::conn::http1::SendRequest;
 use tlsn_prover::{state, Prover, ProverError};
@@ -20,9 +17,9 @@ type ProverWithRequestSender = (
 );
 
 pub async fn run_prove(app_config: &ProveConfig) -> Result<()> {
-    if matches!(app_config.notarisation_config.mode, SessionMode::OneShot) {
-        run_one_shot_prove(app_config).await
+    if matches!(app_config.session.mode, SessionMode::Multi) {
+        run_multi(app_config).await
     } else {
-        run_multi_round_prove(app_config).await
+        run_single(app_config).await
     }
 }

@@ -3,7 +3,7 @@ use dialoguer::console::style;
 use dialoguer::{theme::ColorfulTheme, Input};
 use std::path::{Path, PathBuf};
 
-pub(crate) fn select_proof_path() -> Result<PathBuf> {
+pub(crate) fn load_proof_path() -> Result<PathBuf> {
     // Prompt with validation: path must exist and be a regular file
     let raw: String = Input::with_theme(&ColorfulTheme::default())
         .with_prompt(format!(

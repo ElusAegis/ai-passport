@@ -1,61 +1,45 @@
-use crate::args::NotaryMode;
-use crate::args::{ProveArgs, SessionMode, VerifyArgs};
-use crate::config::load_api_domain::load_api_domain;
-use crate::config::load_api_key::load_api_key;
-use crate::config::load_api_port::load_api_port;
-use crate::config::select_model::select_model_id;
-use crate::config::select_proof_path::select_proof_path;
-use crate::prove::setup::get_total_sent_recv_max;
+use crate::args::{ProveArgs, VerifyArgs};
+use crate::config::{
+    load::{
+        api_domain::load_api_domain, api_key::load_api_key, api_port::load_api_port,
+        model_id::load_model_id, proof_path::load_proof_path,
+    },
+    notary::NotaryConfig,
+    privacy::PrivacyConfig,
+};
 use anyhow::{Context, Result};
 use derive_builder::Builder;
 use dialoguer::console::style;
+use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
-use tlsn_common::config::NetworkSetting;
 use tracing::info;
 
-mod load_api_domain;
-mod load_api_key;
-mod load_api_port;
-mod select_model;
-mod select_proof_path;
-
-/// Privacy settings including topics to censor in requests and responses
-#[derive(Builder, Clone)]
-pub struct PrivacyConfig {
-    pub(crate) request_topics_to_censor: &'static [&'static str],
-    pub(crate) response_topics_to_censor: &'static [&'static str],
-}
-
-impl Default for PrivacyConfig {
-    fn default() -> Self {
-        Self {
-            request_topics_to_censor: &["authorization"],
-            response_topics_to_censor: &[
-                "anthropic-ratelimit-requests-reset",
-                "anthropic-ratelimit-tokens-reset",
-                "request-id",
-                "x-kong-request-id",
-                "cf-ray",
-                "server-timing",
-                "report-to",
-            ],
-        }
-    }
-}
+mod load;
+mod model;
+pub mod notary;
+pub mod privacy;
 
 #[derive(Builder, Clone)]
-pub struct ModelConfig {
+pub struct ServerConfig {
     /// The domain of the server hosting the model API
     pub(crate) domain: String,
     /// The port of the server hosting the model API
     #[builder(setter(into), default = "443")]
     pub(crate) port: u16,
+}
+
+impl ServerConfig {
+    pub fn builder() -> ServerConfigBuilder {
+        ServerConfigBuilder::default()
+    }
+}
+
+#[derive(Builder, Clone)]
+pub struct ModelConfig {
+    pub(crate) server: ServerConfig,
     /// The route for inference requests
     #[builder(setter(into), default = "String::from(\"/v1/chat/completions\")")]
     pub(crate) inference_route: String,
-    /// The route for listing available models
-    #[builder(setter(into), default = "String::from(\"/v1/models\")")]
-    pub(crate) model_list_route: String,
     /// The API key for authentication with the model API
     #[builder(setter(into))]
     pub(crate) api_key: String,
@@ -70,41 +54,23 @@ impl ModelConfig {
     }
 }
 
-#[derive(Builder, Clone)]
-pub struct NotaryConfig {
-    /// The domain of the notary server
-    pub(crate) domain: String,
-    /// The port of the notary server
-    #[builder(setter(into))]
-    pub(crate) port: u16,
-    /// The route for notary requests
-    #[builder(setter(into))]
-    pub(crate) path_prefix: String,
-    /// Notary type
-    #[builder(default = "NotaryMode::Ephemeral")]
-    pub(crate) mode: NotaryMode,
-}
-
-impl NotaryConfig {
-    pub fn builder() -> NotaryConfigBuilder {
-        NotaryConfigBuilder::default()
-    }
+#[derive(Clone, Copy, Debug, Default, Serialize, Deserialize)]
+pub enum SessionMode {
+    /// Create a fresh protocol instance per request/response pair.
+    #[default]
+    Multi,
+    /// Keep a single protocol instance across multiple requests (stateless API -> resend history).
+    Single,
 }
 
 #[derive(Builder, Clone)]
-#[builder(pattern = "owned")]
-pub struct NotarisationConfig {
-    /// Notary configuration
-    pub(crate) notary_config: NotaryConfig,
-    /// Maximum expected number of requests to send
-    pub(crate) max_req_num_sent: usize,
+pub struct SessionConfig {
+    /// Maximum expected number of requests to the model
+    pub(crate) max_msg_num: usize,
     /// Maximum number of bytes in a user prompt
     pub max_single_request_size: usize,
     /// Maximum number of bytes in the response
     pub max_single_response_size: usize,
-    /// Network optimization strategy
-    #[builder(default)]
-    pub(crate) network_optimization: NetworkSetting,
     /// Two modes:
     /// - **One‑shot**: we spin up a fresh protocol instance per request/response pair,
     ///   so we can size the send/recv budgets exactly from the *current* message sizes.
@@ -115,29 +81,20 @@ pub struct NotarisationConfig {
     pub(crate) mode: SessionMode,
 }
 
-impl NotarisationConfig {
-    pub fn builder() -> NotarisationConfigBuilder {
-        NotarisationConfigBuilder::default()
-    }
-
-    pub fn create_builder(&self) -> NotarisationConfigBuilder {
-        NotarisationConfigBuilder::default()
-            .notary_config(self.notary_config.clone())
-            .max_req_num_sent(self.max_req_num_sent)
-            .max_single_request_size(self.max_single_request_size)
-            .max_single_response_size(self.max_single_response_size)
-            .network_optimization(self.network_optimization)
-            .mode(self.mode)
+impl SessionConfig {
+    pub fn builder() -> SessionConfigBuilder {
+        SessionConfigBuilder::default()
     }
 }
 
 #[derive(Builder, Clone)]
 #[builder(pattern = "owned")]
 pub struct ProveConfig {
-    pub(crate) model_config: ModelConfig,
+    pub(crate) model: ModelConfig,
     #[builder(default)]
-    pub(crate) privacy_config: PrivacyConfig,
-    pub(crate) notarisation_config: NotarisationConfig,
+    pub(crate) privacy: PrivacyConfig,
+    pub notary: NotaryConfig,
+    pub(crate) session: SessionConfig,
 }
 
 impl ProveConfig {
@@ -151,45 +108,49 @@ impl ProveConfig {
         let api_domain = load_api_domain().context("Failed to load API domain")?;
         let api_key = load_api_key().context("Failed to load API key")?;
         let api_port = load_api_port().context("Failed to load API port")?;
+        let model_list_route = args.model_list_route;
 
-        let mut model_config_builder = ModelConfig::builder()
-            .api_key(api_key)
-            .domain(api_domain)
+        let server_config = ServerConfig::builder()
+            .domain(api_domain.clone())
             .port(api_port)
-            .clone();
+            .build()
+            .context("Failed to build server configuration")?;
 
         let model_id = match args.model_id {
             Some(id) => id,
-            None => select_model_id(&model_config_builder.model_id("tmp").build()?)
+            None => load_model_id(&server_config, &model_list_route)
                 .await
                 .context("Failed to select model")?,
         };
 
-        let model_config = model_config_builder
+        let model_config = ModelConfig::builder()
+            .server(server_config)
+            .api_key(api_key)
             .model_id(model_id)
             .build()
             .context("Failed to build model")?;
+
+        let session_config = SessionConfig::builder()
+            .max_msg_num(args.max_msg_num)
+            .max_single_request_size(args.max_single_request_size)
+            .max_single_response_size(args.max_single_response_size)
+            .mode(args.session_mode)
+            .build()
+            .context("Failed to build session configuration")?;
 
         let notary_config = NotaryConfig::builder()
             .domain(args.notary_domain)
             .mode(args.notary_mode)
             .path_prefix(args.notary_version)
             .port(args.notary_port)
-            .build()
-            .context("Failed to build Notary Config")?;
-
-        let notarisation_config = NotarisationConfig::builder()
-            .notary_config(notary_config)
-            .max_req_num_sent(args.max_req_num_sent)
-            .max_single_request_size(args.max_single_request_size)
-            .max_single_response_size(args.max_single_response_size)
-            .mode(args.session_mode)
             .network_optimization(args.network_optimization)
-            .build()?;
+            .finalize_for_session(&session_config)?;
 
         let config: Self = Self::builder()
-            .model_config(model_config)
-            .notarisation_config(notarisation_config)
+            .model(model_config)
+            .privacy(PrivacyConfig::default())
+            .session(session_config)
+            .notary(notary_config)
             .build()?;
 
         Self::print_config_summary(&config)?;
@@ -220,14 +181,17 @@ impl ProveConfig {
                 "Model Inference API",
                 format!(
                     "{}:{}/{}",
-                    config.model_config.domain,
-                    config.model_config.port,
-                    &config.model_config.inference_route.trim_start_matches('/'),
+                    config.model.server.domain,
+                    config.model.server.port,
+                    config
+                        .model
+                        .inference_route
+                        .trim_start_matches('/')
                 ),
             )
         );
 
-        info!(target: "plain", "{}", kv("Model ID", config.model_config.model_id.clone()));
+        info!(target: "plain", "{}", kv("Model ID", config.model.model_id.clone()));
 
         // --- Notary --------------------------------------------------------------
         info!(target: "plain",
@@ -236,13 +200,12 @@ impl ProveConfig {
                 "Notary API",
                 format!(
                     "{}:{}/{}",
-                    config.notarisation_config.notary_config.domain,
-                    config.notarisation_config.notary_config.port,
+                    config.notary.domain,
+                    config.notary.port,
                     config
-                        .notarisation_config
-                        .notary_config
+                        .notary
                         .path_prefix
-                        .trim_start_matches('/'),
+                        .trim_start_matches('/')
                 ),
             )
         );
@@ -251,20 +214,29 @@ impl ProveConfig {
             "{}",
             kv(
                 "Notary Mode",
-                format!("{:?}", config.notarisation_config.notary_config.mode),
+                format!("{:?}", config.notary.mode),
             )
         );
 
-        // --- Protocol -------------------------------------------------------------
-        let s_req = config.notarisation_config.max_single_request_size;
-        let s_res = config.notarisation_config.max_single_response_size;
-        let (total_sent, total_recv) = get_total_sent_recv_max(&config.notarisation_config);
+        info!(target: "plain",
+            "{}",
+            kv(
+                "Network Optimisation",
+                format!("{:?}", config.notary.network_optimization),
+            )
+        );
+
+        // --- Protocol ------------------------------------------------------------
+        let s_req = config.session.max_single_request_size;
+        let s_res = config.session.max_single_response_size;
+        let total_sent = config.notary.max_total_sent;
+        let total_recv = config.notary.max_total_recv;
 
         info!(target: "plain",
             "{}",
             kv(
                 "Protocol Session Mode",
-                format!("{}", config.notarisation_config.mode),
+                format!("{}", config.session.mode),
             )
         );
 
@@ -272,7 +244,7 @@ impl ProveConfig {
             "{}",
             kv(
                 "Max Number of Model Requests",
-                format!("{}", config.notarisation_config.max_req_num_sent),
+                format!("{}", config.session.max_msg_num),
             )
         );
 
@@ -326,10 +298,7 @@ impl VerifyConfig {
     }
 
     pub(crate) fn setup(args: VerifyArgs) -> Result<VerifyConfig> {
-        let raw_path = match args.proof_path {
-            Some(path) => path,
-            None => select_proof_path()?,
-        };
+        let raw_path = args.proof_path.unwrap_or(load_proof_path()?);
 
         // Prefer a canonical absolute path if possible
         let path = PathBuf::from(raw_path);

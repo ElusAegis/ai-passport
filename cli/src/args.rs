@@ -1,12 +1,13 @@
+use crate::config::notary::NotaryMode;
+use crate::SessionMode;
 use clap::ValueHint;
 use clap::{Args, Parser, Subcommand};
-use serde::{Deserialize, Serialize};
 use std::fmt::Display;
 use std::path::PathBuf;
 use tlsn_common::config::NetworkSetting;
 
 pub const DEFAULT_NETWORK_OPTIMIZATION: &str = "latency"; // parsed by parser
-pub const DEFAULT_SESSION_MODE: &str = "multi-round"; // parsed by parser
+pub const DEFAULT_SESSION_MODE: &str = "single"; // parsed by parser
 
 pub const DEFAULT_NOTARY_TYPE: &str = "remote"; // parsed by parser
 pub const DEFAULT_NOTARY_DOMAIN: &str = "notary.pse.dev"; // default remote notary server
@@ -16,29 +17,13 @@ pub const DEFAULT_MAX_REQ_NUM_SENT: usize = 3; // e.g., up to 3 model API calls
 pub const DEFAULT_MAX_SINGLE_REQUEST_SIZE: usize = 1024; // 1 KiB prompt budget
 pub const DEFAULT_MAX_SINGLE_RESPONSE_SIZE: usize = 1024; // 1 KiB response budget
 
-#[derive(Clone, Copy, Debug, Default, Serialize, Deserialize)]
-pub enum SessionMode {
-    /// Create a fresh protocol instance per request/response pair.
-    #[default]
-    OneShot,
-    /// Keep a single protocol instance across multiple requests (stateless API -> resend history).
-    MultiRound,
-}
-
 impl Display for SessionMode {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            SessionMode::OneShot => write!(f, "one-shot"),
-            SessionMode::MultiRound => write!(f, "multi-round"),
+            SessionMode::Multi => write!(f, "multi"),
+            SessionMode::Single => write!(f, "single"),
         }
     }
-}
-
-#[derive(Clone, Copy, Debug, Serialize, Deserialize)]
-pub enum NotaryMode {
-    Ephemeral,
-    RemoteNonTLS,
-    RemoteTLS,
 }
 
 #[derive(Parser)]
@@ -73,13 +58,17 @@ pub(crate) struct ProveArgs {
     )]
     pub(crate) env_file: PathBuf,
 
+    /// Model API route to get a model list (optional for proving)
+    #[arg(long, env = "MODEL_LIST_ROUTE", default_value = "/v1/models")]
+    pub(crate) model_list_route: String,
+
     /// Maximum expected number of requests to send
     #[arg(
         long,
         env = "MAX_REQ_NUM_SENT",
         default_value_t = DEFAULT_MAX_REQ_NUM_SENT
     )]
-    pub(crate) max_req_num_sent: usize,
+    pub(crate) max_msg_num: usize,
 
     /// Maximum number of bytes in user prompt
     #[arg(
@@ -106,9 +95,9 @@ pub(crate) struct ProveArgs {
     )]
     pub(crate) network_optimization: NetworkSetting,
 
-    /// Session mode (one-shot | multi-round).
-    /// one-shot: new protocol per request; exact per-round sizing.
-    /// multi-round: single protocol; resend growing history.
+    /// Session mode (multi | single).
+    /// multi: new protocol per request; exact per-round sizing.
+    /// single: single protocol; resend growing history.
     #[arg(
         long,
         env = "SESSION_MODE",
@@ -176,10 +165,10 @@ fn parse_network_setting(s: &str) -> Result<NetworkSetting, String> {
 
 fn parse_session_mode(s: &str) -> Result<SessionMode, String> {
     match s.trim().to_ascii_lowercase().as_str() {
-        "one-shot" | "oneshot" | "one_shot" => Ok(SessionMode::OneShot),
-        "multi-round" | "multiround" | "multi_round" | "multi" => Ok(SessionMode::MultiRound),
+        "multi" => Ok(SessionMode::Multi),
+        "single" => Ok(SessionMode::Single),
         other => Err(format!(
-            "invalid SESSION_MODE '{}'; expected one of: one-shot, multi-round",
+            "invalid SESSION_MODE '{}'; expected one of: multi, single",
             other
         )),
     }

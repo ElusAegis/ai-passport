@@ -1,8 +1,7 @@
-use anyhow::bail;
 use criterion::{criterion_group, criterion_main, Criterion, SamplingMode, Throughput};
 use passport_for_ai::{
-    get_total_sent_recv_max, run_prove, with_input_source, InputSource, ModelConfig,
-    NotarisationConfig, NotaryConfig, NotaryMode, PrivacyConfig, ProveConfig, SessionMode,
+    run_prove, with_input_source, InputSource, ModelConfig, NotaryConfig, NotaryMode,
+    PrivacyConfig, ProveConfig, ServerConfig, SessionConfig, SessionMode,
 };
 use rand::distr::Alphanumeric;
 use rand::Rng;
@@ -31,12 +30,6 @@ impl InputSource for VecInputSource {
 // ───────────────────────────────────────────────────────────────────────────────
 // Presets and pairings
 // ───────────────────────────────────────────────────────────────────────────────
-
-#[derive(Clone, Copy, Debug)]
-enum NetOpt {
-    Latency,
-    Bandwidth,
-}
 
 #[derive(Clone)]
 struct ModelPreset {
@@ -80,10 +73,18 @@ fn model_presets() -> Vec<ModelPreset> {
             api_port: 3000,
             api_key_source: ApiKeySource::Direct("secret123"),
         },
+        // Red Pill API (3b)
+        ModelPreset {
+            name: "redpill-remote-3b",
+            model_id: "mistralai/ministral-3b",
+            api_domain: "api.red-pill.ai",
+            api_port: 443,
+            api_key_source: ApiKeySource::FromEnv("REDPILL_API_KEY"),
+        },
         // Red Pill API
         ModelPreset {
-            name: "redpill-remote",
-            model_id: "meta-llama/llama-3.2-1b-instruct",
+            name: "redpill-remote-8b",
+            model_id: "mistralai/ministral-8b",
             api_domain: "api.red-pill.ai",
             api_port: 443,
             api_key_source: ApiKeySource::FromEnv("REDPILL_API_KEY"),
@@ -103,7 +104,19 @@ fn notary_presets() -> Vec<NotaryPreset> {
             version_path: "",
             mode: NotaryMode::RemoteNonTLS,
             caps: NotaryCaps {
-                max_sent_bytes: 4 * KIB,
+                max_sent_bytes: 16 * KIB,
+                max_recv_bytes: 16 * KIB,
+            },
+        },
+        // My remote: sent=16 KiB, recv=16 KiB
+        NotaryPreset {
+            name: "notary-remote",
+            domain: "notary.proof-of-autonomy.elusaegis.xyz",
+            port: 7047,
+            version_path: "",
+            mode: NotaryMode::RemoteTLS,
+            caps: NotaryCaps {
+                max_sent_bytes: 16 * KIB,
                 max_recv_bytes: 16 * KIB,
             },
         },
@@ -125,6 +138,7 @@ fn notary_presets() -> Vec<NotaryPreset> {
 // Explicit pairing list ONLY (no cross product)
 // 1) local+local
 // 2) pse + redpill
+#[allow(unused)]
 fn pairings() -> Vec<(ModelPreset, NotaryPreset)> {
     let models = model_presets();
     let notaries = notary_presets();
@@ -134,15 +148,25 @@ fn pairings() -> Vec<(ModelPreset, NotaryPreset)> {
         .find(|m| m.name == "poa-local")
         .unwrap()
         .clone();
-    let redpill = models
+    let redpill_3b = models
         .iter()
-        .find(|m| m.name == "redpill-remote")
+        .find(|m| m.name == "redpill-remote-3b")
+        .unwrap()
+        .clone();
+    let redpill_8b = models
+        .iter()
+        .find(|m| m.name == "redpill-remote-8b")
         .unwrap()
         .clone();
 
     let notary_local = notaries
         .iter()
         .find(|n| n.name == "notary-local")
+        .unwrap()
+        .clone();
+    let notary_remote = notaries
+        .iter()
+        .find(|n| n.name == "notary-remote")
         .unwrap()
         .clone();
     let notary_pse = notaries
@@ -152,8 +176,9 @@ fn pairings() -> Vec<(ModelPreset, NotaryPreset)> {
         .clone();
 
     vec![
-        // (poa_local, notary_local),
-        (redpill, notary_pse),
+        (poa_local, notary_local),
+        // (redpill_3b, notary_remote.clone()),
+        // (redpill_8b, notary_remote),
     ]
 }
 
@@ -172,18 +197,8 @@ fn prompt_bytes(n: usize) -> String {
 
 /// N prompts (of ~req_bytes) then a terminating None (exit).
 fn make_inputs(n_msgs: usize, req_bytes: usize) -> anyhow::Result<Vec<Option<String>>> {
-    const PACKAGE_OVERHEAD: usize = 600;
-
-    // Ensure we have enough bytes for the request, accounting for overhead
-    if req_bytes < PACKAGE_OVERHEAD {
-        bail!(
-            "Request size must be at least {} bytes to account for overhead.",
-            PACKAGE_OVERHEAD
-        );
-    }
-
     let inputs = (0..n_msgs)
-        .map(|_| Some(prompt_bytes(req_bytes - PACKAGE_OVERHEAD)))
+        .map(|_| Some(prompt_bytes(req_bytes)))
         .chain(std::iter::once(None))
         .collect();
 
@@ -197,7 +212,6 @@ fn make_inputs(n_msgs: usize, req_bytes: usize) -> anyhow::Result<Vec<Option<Str
 fn build_prove_config(
     model: &ModelPreset,
     notary: &NotaryPreset,
-    net: NetOpt,
     mode: SessionMode,
     max_req_num_sent: usize,
     max_single_request_size: usize,
@@ -213,52 +227,51 @@ fn build_prove_config(
 
     let inference_route =
         std::env::var("MODEL_INFER_ROUTE").unwrap_or_else(|_| "/v1/chat/completions".into());
-    let model_list_route =
-        std::env::var("MODEL_LIST_ROUTE").unwrap_or_else(|_| "/v1/models".into());
 
-    let model_config = ModelConfig::builder()
+    let server_config = ServerConfig::builder()
         .domain(model.api_domain.to_string())
         .port(model.api_port)
+        .build()
+        .expect("server_config");
+
+    let model_config = ModelConfig::builder()
+        .server(server_config)
         .inference_route(inference_route)
-        .model_list_route(model_list_route)
         .api_key(api_key)
         .model_id(model.model_id.to_string())
         .build()
         .expect("model_config");
+
+    let session_config = SessionConfig::builder()
+        .max_msg_num(max_req_num_sent)
+        .max_single_request_size(max_single_request_size)
+        .max_single_response_size(max_single_response_size)
+        .mode(mode)
+        .build()
+        .expect("session_config");
 
     let notary_config = NotaryConfig::builder()
         .domain(notary.domain.to_string())
         .port(notary.port)
         .path_prefix(notary.version_path.to_string())
         .mode(notary.mode)
-        .build()
+        .network_optimization(NetworkSetting::Latency)
+        .finalize_for_session(&session_config)
         .expect("notary_config");
 
-    let notarisation_config = NotarisationConfig::builder()
-        .notary_config(notary_config)
-        .max_req_num_sent(max_req_num_sent)
-        .max_single_request_size(max_single_request_size)
-        .max_single_response_size(max_single_response_size)
-        .network_optimization(match net {
-            NetOpt::Latency => NetworkSetting::Latency,
-            NetOpt::Bandwidth => NetworkSetting::Bandwidth,
-        })
-        .mode(mode)
-        .build()
-        .expect("notarisation_config");
-
     // Check if the notary can support the requested configuration
-    let (max_sent, max_recv) = get_total_sent_recv_max(&notarisation_config);
-
-    if max_sent > notary.caps.max_sent_bytes || max_recv > notary.caps.max_recv_bytes {
+    if notary_config.max_total_sent > notary.caps.max_sent_bytes
+        || notary_config.max_total_recv > notary.caps.max_recv_bytes
+    {
         return None;
     }
 
     Some(
         ProveConfig::builder()
-            .model_config(model_config)
-            .privacy_config(PrivacyConfig::default())
-            .notarisation_config(notarisation_config)
+            .model(model_config)
+            .privacy(PrivacyConfig::default())
+            .notary(notary_config)
+            .session(session_config)
             .build()
             .expect("prove_config"),
     )
@@ -272,72 +285,80 @@ pub fn prove_benchmarks(c: &mut Criterion) {
     let mut group = c.benchmark_group("run_prove");
     group.sampling_mode(SamplingMode::Flat);
     group.sample_size(10);
-    group.measurement_time(Duration::from_secs(60));
+    group.measurement_time(Duration::from_secs(10));
+
+    // Initiate logger from tracing using env and error as backup
+    tracing_subscriber::fmt()
+        .with_env_filter(tracing_subscriber::EnvFilter::from_default_env())
+        .with_writer(std::io::stderr)
+        .with_ansi(true)
+        .with_line_number(true)
+        .with_file(true)
+        .init();
 
     // Input batches and aligned max-req constraints
-    let input_cases: &[(usize, usize)] = &[(1, 1), (1, 2), (2, 2), (4, 4)];
+    let input_cases: &[(usize, usize)] = &[(1, 1), (1, 2), (2, 2), (4, 4), (8, 8)];
+    let modes = &[SessionMode::Single, SessionMode::Multi];
 
-    for (model, notary) in pairings() {
-        for &net in &[NetOpt::Latency, NetOpt::Bandwidth] {
-            for &mode in &[SessionMode::OneShot, SessionMode::MultiRound] {
-                for &(num_inputs, max_req_num) in input_cases {
-                    // Base per-message sizes (your “approx” starting point)
-                    let max_request_size = 1024;
-                    let max_response_size = 1024;
+    for &(num_inputs, max_req_num) in input_cases {
+        for (model, notary) in pairings() {
+            for &mode in modes {
+                // Base per-message sizes (your “approx” starting point)
+                let max_request_size = 800;
+                let max_response_size = 850;
 
-                    // First attempt at base size; skip pair if even the base doesn’t fit
-                    let cfg = match build_prove_config(
-                        &model,
-                        &notary,
-                        net,
-                        mode,
-                        max_req_num,
-                        max_request_size,
-                        max_response_size,
-                    ) {
-                        Some(cfg) => cfg,
-                        None => continue,
-                    };
+                // First attempt at base size; skip pair if even the base doesn’t fit
+                let cfg = match build_prove_config(
+                    &model,
+                    &notary,
+                    mode,
+                    max_req_num,
+                    max_request_size,
+                    max_response_size,
+                ) {
+                    Some(cfg) => cfg,
+                    None => continue,
+                };
 
-                    let Ok(input) = make_inputs(num_inputs, max_request_size) else {
-                        continue;
-                    };
+                let Ok(input) = make_inputs(num_inputs, max_request_size) else {
+                    continue;
+                };
 
-                    let bid = format!(
-                        "{}+{}-{:?}-{:?}---{}(up)-{}(down)-{}(msg)-{}(max-msg)",
-                        model.name,
-                        notary.name,
-                        net,
-                        mode,
-                        max_request_size,
-                        max_response_size,
-                        num_inputs,
-                        max_req_num
-                    );
-                    group.throughput(Throughput::Elements(num_inputs as u64));
+                let bid = format!(
+                    "{}+{}-{:?}---{}(r-up)-{}(t-up)-{}(r-down)-{}(t-down)-{}(#msg)-{}(#max-msg)",
+                    model.name,
+                    notary.name,
+                    mode,
+                    max_request_size,
+                    cfg.notary.max_total_sent,
+                    max_response_size,
+                    cfg.notary.max_total_recv,
+                    num_inputs,
+                    max_req_num
+                );
+                group.throughput(Throughput::Elements(num_inputs as u64));
 
-                    // Single-threaded runtime to keep overhead predictable
-                    let rt = tokio::runtime::Builder::new_current_thread()
-                        .enable_all()
-                        .build()
-                        .unwrap();
+                // Single-threaded runtime to keep overhead predictable
+                let rt = tokio::runtime::Builder::new_current_thread()
+                    .enable_all()
+                    .build()
+                    .unwrap();
 
-                    group.bench_with_input(bid.clone(), &num_inputs, |b, &_| {
-                        b.iter(|| {
-                            rt.block_on(async {
-                                let src = VecInputSource::new(input.clone());
-                                with_input_source(src, async {
-                                    let _ = run_prove(&cfg).await.map_err(|e| {
-                                        println!(
-                                            "Failed to run bid {bid:?}. Error in run_prove: {e:?}."
-                                        )
-                                    });
-                                })
-                                .await;
-                            });
+                group.bench_with_input(bid.clone(), &num_inputs, |b, &_| {
+                    b.iter(|| {
+                        rt.block_on(async {
+                            let src = VecInputSource::new(input.clone());
+                            with_input_source(src, async {
+                                let _ = run_prove(&cfg).await.map_err(|e| {
+                                    println!(
+                                        "Failed to run bid {bid:?}. Error in run_prove: {e:?}."
+                                    )
+                                });
+                            })
+                            .await;
                         });
                     });
-                }
+                });
             }
         }
     }

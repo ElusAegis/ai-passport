@@ -1,5 +1,4 @@
-use crate::args::SessionMode;
-use crate::config::{ModelConfig, ProveConfig};
+use crate::config::{ModelConfig, ProveConfig, SessionMode};
 use crate::utils::io_input::try_read_user_input_from_ctx;
 use crate::utils::spinner::with_spinner_future;
 use anyhow::Context;
@@ -29,8 +28,8 @@ pub(super) async fn single_interaction_round(
 
     // exit if empty or "exit" (case-insensitive)
     let Some(user_input) = maybe_line.filter(|s| !s.trim().eq_ignore_ascii_case("exit")) else {
-        if matches!(config.notarisation_config.mode, SessionMode::MultiRound) {
-            send_connection_close(request_sender, &config.model_config)
+        if matches!(config.session.mode, SessionMode::Single) {
+            send_connection_close(request_sender, &config.model)
                 .await
                 .context("failed to send close request")?;
         }
@@ -45,8 +44,8 @@ pub(super) async fn single_interaction_round(
 
     let request = generate_request(
         messages,
-        &config.model_config,
-        matches!(config.notarisation_config.mode, SessionMode::OneShot),
+        &config.model,
+        matches!(config.session.mode, SessionMode::Multi),
     )
     .context("Error generating request")?;
 
@@ -62,7 +61,7 @@ pub(super) async fn single_interaction_round(
         .and_then(|v| v.as_str())
         .context("Failed to get assistant's message content")?;
     let body = style(content);
-    info!(target: "plain", "\n{header}\n({}) {body}\n", config.model_config.model_id);
+    info!(target: "plain", "\n{header}\n({}) {body}\n", config.model.model_id);
 
     messages.push(received_assistant_message);
 
@@ -114,7 +113,7 @@ pub(crate) async fn send_connection_close(
     let req = Request::builder()
         .method(Method::GET) // or HEAD if your endpoint allows it
         .uri(model_settings.inference_route.as_str())
-        .header(HOST, model_settings.domain.as_str())
+        .header(HOST, model_settings.server.domain.as_str())
         .header("Accept-Encoding", "identity")
         .header(CONNECTION, "close")
         .header(CONTENT_LENGTH, "0")
@@ -124,7 +123,8 @@ pub(crate) async fn send_connection_close(
 
     // Send the request and discard the response without reading the body.
     // We await the response head to ensure the request is actually written.
-    let _ = request_sender.send_request(req).await?;
+    let _ = request_sender.send_request(req).await;
+
     Ok(())
 }
 
@@ -146,7 +146,7 @@ pub(crate) fn generate_request(
     Request::builder()
         .method(Method::POST)
         .uri(model_settings.inference_route.as_str())
-        .header(HOST, model_settings.domain.as_str())
+        .header(HOST, model_settings.server.domain.as_str())
         .header(ACCEPT_ENCODING, "identity")
         .header(
             CONNECTION,
