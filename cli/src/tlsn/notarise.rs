@@ -8,7 +8,7 @@ use tlsn_formats::http::{DefaultHttpCommitter, HttpCommit, HttpTranscript};
 use tlsn_prover::{state, Prover};
 use tracing::debug;
 
-pub(super) async fn notarise_session(
+pub async fn notarise_session(
     mut prover: Prover<state::Committed>,
 ) -> Result<(Attestation, Secrets)> {
     // Parse the HTTP transcript.

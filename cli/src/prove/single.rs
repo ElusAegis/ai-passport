@@ -1,6 +1,6 @@
 use crate::config::ProveConfig;
 use crate::prove::live_interact::{send_connection_close, single_interaction_round};
-use crate::prove::notarise::notarise_session;
+use crate::tlsn::notarise::notarise_session;
 use crate::tlsn::save_proof::save_to_file;
 use crate::tlsn::setup::setup;
 use crate::utils::spinner::with_spinner_future;

@@ -1,6 +1,5 @@
 mod live_interact;
 mod multi;
-mod notarise;
 mod single;
 
 use crate::config::{ProveConfig, SessionMode};
