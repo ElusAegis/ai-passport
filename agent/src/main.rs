@@ -1,19 +1,12 @@
-use crate::market_data::Market;
+use crate::polymarket::agent_msg::build_polymarket_context;
+use crate::polymarket::fetch::Market;
 use crate::utils::logging::init_logging;
-use anyhow::Context;
-use reqwest::Client;
 
 mod market_data;
 mod utils;
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
-    // Init logging using tracing subscriber with ENV and some backup default
-    tracing_subscriber::fmt()
-        .with_env_filter(tracing_subscriber::EnvFilter::from_default_env())
-        .with_target(false)
-        .without_time()
-        .init();
     init_logging();
 
 
