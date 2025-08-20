@@ -19,6 +19,11 @@ mod model;
 pub mod notary;
 pub mod privacy;
 
+/// Expected byte package overhead for a single request.
+const REQUEST_OVERHEAD: usize = 700;
+/// Expected byte package overhead for a single response.
+const RESPONSE_OVERHEAD: usize = 700;
+
 #[derive(Builder, Clone)]
 pub struct ServerConfig {
     /// The domain of the server hosting the model API
@@ -71,6 +76,12 @@ pub struct SessionConfig {
     pub max_single_request_size: usize,
     /// Maximum number of bytes in the response
     pub max_single_response_size: usize,
+    /// Maximum number of bytes in the whole request (including package overhead)
+    #[builder(default = self.max_single_request_size.unwrap() + REQUEST_OVERHEAD)]
+    pub max_total_single_request_size: usize,
+    /// Maximum number of bytes in the whole response (including package overhead)
+    #[builder(default = self.max_single_response_size.unwrap() + RESPONSE_OVERHEAD)]
+    pub max_total_response_size: usize,
     /// Two modes:
     /// - **One‑shot**: we spin up a fresh protocol instance per request/response pair,
     ///   so we can size the send/recv budgets exactly from the *current* message sizes.
@@ -85,6 +96,28 @@ impl SessionConfig {
     pub fn builder() -> SessionConfigBuilder {
         SessionConfigBuilder::default()
     }
+
+    pub fn max_total_sent_recv(&self) -> (usize, usize) {
+        let n = self.max_msg_num;
+
+        let req = self.max_single_request_size;
+        let rsp = self.max_single_response_size;
+
+        let full_req = self.max_total_single_request_size;
+        let full_rsp = self.max_total_response_size;
+
+        if matches!(self.mode, SessionMode::Multi) {
+            let max_total_sent = full_req + (n - 1) * (req + rsp);
+            let max_total_recv = full_rsp;
+
+            (max_total_sent, max_total_recv)
+        } else {
+            let max_total_sent = full_req * n + n * (n - 1) * (req + rsp) / 2;
+            let max_total_recv = full_rsp * n;
+
+            (max_total_sent, max_total_recv)
+        }
+    }
 }
 
 #[derive(Builder, Clone)]
@@ -94,7 +127,7 @@ pub struct ProveConfig {
     #[builder(default)]
     pub(crate) privacy: PrivacyConfig,
     pub notary: NotaryConfig,
-    pub(crate) session: SessionConfig,
+    pub session: SessionConfig,
 }
 
 impl ProveConfig {

@@ -259,10 +259,10 @@ fn build_prove_config(
         .finalize_for_session(&session_config)
         .expect("notary_config");
 
+    let (max_total_sent, max_total_recv) = session_config.max_total_sent_recv();
+
     // Check if the notary can support the requested configuration
-    if notary_config.max_total_sent > notary.caps.max_sent_bytes
-        || notary_config.max_total_recv > notary.caps.max_recv_bytes
-    {
+    if max_total_sent > notary.caps.max_sent_bytes || max_total_recv > notary.caps.max_recv_bytes {
         return None;
     }
 
@@ -297,7 +297,7 @@ pub fn prove_benchmarks(c: &mut Criterion) {
         .init();
 
     // Input batches and aligned max-req constraints
-    let input_cases: &[(usize, usize)] = &[(1, 1), (1, 2), (2, 2), (4, 4), (8, 8)];
+    let input_cases: &[(usize, usize)] = &[(4, 4), (8, 8)];
     let modes = &[SessionMode::Single, SessionMode::Multi];
 
     for &(num_inputs, max_req_num) in input_cases {
@@ -324,15 +324,17 @@ pub fn prove_benchmarks(c: &mut Criterion) {
                     continue;
                 };
 
+                let (max_total_sent, max_total_recv) = cfg.session.max_total_sent_recv();
+
                 let bid = format!(
                     "{}+{}-{:?}---{}(r-up)-{}(t-up)-{}(r-down)-{}(t-down)-{}(#msg)-{}(#max-msg)",
                     model.name,
                     notary.name,
                     mode,
                     max_request_size,
-                    cfg.notary.max_total_sent,
+                    max_total_sent,
                     max_response_size,
-                    cfg.notary.max_total_recv,
+                    max_total_recv,
                     num_inputs,
                     max_req_num
                 );

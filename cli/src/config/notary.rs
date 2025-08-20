@@ -5,11 +5,6 @@ use derive_builder::Builder;
 use serde::{Deserialize, Serialize};
 use tlsn_common::config::NetworkSetting;
 
-/// Expected byte package overhead for a single request.
-const REQUEST_OVERHEAD: usize = 700;
-/// Expected byte package overhead for a single response.
-const RESPONSE_OVERHEAD: usize = 700;
-
 #[derive(Clone, Copy, Debug, Serialize, Deserialize)]
 pub enum NotaryMode {
     Ephemeral,
@@ -51,13 +46,13 @@ impl NotaryConfig {
         NotaryConfigBuilder::default()
     }
 
-    pub fn increase_total_sent(&self, added_total_sent: usize) -> NotaryConfig {
+    pub fn set_total_sent(&self, total_sent: usize) -> NotaryConfig {
         NotaryConfigBuilder::default()
             .domain(self.domain.clone())
             .port(self.port)
             .path_prefix(self.path_prefix.clone())
             .mode(self.mode)
-            .max_total_sent(self.max_total_sent + added_total_sent)
+            .max_total_sent(total_sent)
             .max_total_recv(self.max_total_recv)
             .defer_decryption(self.defer_decryption)
             .max_decrypted_online(self.max_decrypted_online)
@@ -72,23 +67,16 @@ impl NotaryConfigBuilder {
         mut self: NotaryConfigBuilder,
         config: &SessionConfig,
     ) -> Result<NotaryConfig> {
-        let n = config.max_msg_num;
-
-        let req = config.max_single_request_size;
-        let rsp = config.max_single_response_size;
-
-        let full_req = req + REQUEST_OVERHEAD;
-        let full_rsp = rsp + RESPONSE_OVERHEAD;
-
         let (total_sent, total_recv) = if matches!(config.mode, SessionMode::Multi) {
             // --- One‑shot: exact, per‑round sizing --------------------------------
             //
             // We create a new protocol instance per request. We already know (or can
             // compute) precise sizes for this single request/response.
             // This is done before we invoke the setup.
-            // This is the largest overhead given the number of requests
-            // Note that only the last channel will have such size.
-            ((req + rsp) * (n - 1) + full_req, full_rsp)
+            (
+                config.max_total_single_request_size,
+                config.max_total_response_size,
+            )
         } else {
             // --- Multi‑round: stateless model API; sizes grow with history ----------
             //
@@ -102,8 +90,7 @@ impl NotaryConfigBuilder {
             //
             //   total_sent_estimate = (req * (n - 1) * n + rsp * (n - 1) * (n - 2)) / 2
             //   total_recv_estimate = rsp * n
-            let total_sent_max = full_req * n + ((req * (n - 1) * n) + rsp * (n - 1) * n) / 2;
-            let total_recv_max = full_rsp * n;
+            let (total_sent_max, total_recv_max) = config.max_total_sent_recv();
 
             self = self
                 .defer_decryption(false)

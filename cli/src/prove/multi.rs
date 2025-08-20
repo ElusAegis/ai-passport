@@ -14,6 +14,7 @@ use tracing::{debug, info};
 
 pub(crate) async fn run_multi(app_config: &ProveConfig) -> Result<()> {
     let app_max_single_request_size = app_config.session.max_single_request_size;
+    let app_max_total_single_request_size = app_config.session.max_total_single_request_size;
     let app_max_single_response_size = app_config.session.max_single_response_size;
     let max_req_num = app_config.session.max_msg_num;
 
@@ -30,9 +31,11 @@ pub(crate) async fn run_multi(app_config: &ProveConfig) -> Result<()> {
         spawn_setup(app_config.notary.clone());
 
     // Set up the future instance of the prover
-    let future_notary_config = app_config
-        .notary
-        .increase_total_sent(app_max_single_request_size + app_max_single_response_size);
+    let future_notary_config = app_config.notary.set_total_sent(
+        app_max_single_request_size
+            + app_max_total_single_request_size
+            + app_max_single_response_size,
+    );
     let mut future_instance_handle: Option<JoinHandle<Result<ProverWithRequestSender>>> =
         if max_req_num > 1 {
             Some(spawn_setup(future_notary_config))
@@ -86,8 +89,8 @@ pub(crate) async fn run_multi(app_config: &ProveConfig) -> Result<()> {
         let message_byte_size = encoded_messages.len();
 
         // Prepare the next iteration's future instance handle
-        let future_notary_config = app_config.notary.increase_total_sent(
-            message_byte_size + app_max_single_request_size + app_max_single_response_size,
+        let future_notary_config = app_config.notary.set_total_sent(
+            message_byte_size + app_max_total_single_request_size + app_max_single_response_size,
         );
 
         future_instance_handle = if counter < max_req_num {
