@@ -1,6 +1,6 @@
+use ai_passport::Application;
 use anyhow::{Context, Result};
 use dialoguer::console::style;
-use passport_for_ai::Application;
 use tracing::info;
 use tracing::level_filters::LevelFilter;
 use tracing_subscriber::filter::Targets;

@@ -1,8 +1,8 @@
-use criterion::{criterion_group, criterion_main, Criterion, SamplingMode, Throughput};
-use passport_for_ai::{
+use ai_passport::{
     run_prove, with_input_source, InputSource, ModelConfig, NotaryConfig, NotaryMode,
     PrivacyConfig, ProveConfig, ServerConfig, SessionConfig, SessionMode,
 };
+use criterion::{criterion_group, criterion_main, Criterion, SamplingMode, Throughput};
 use rand::distr::Alphanumeric;
 use rand::Rng;
 use std::time::Duration;

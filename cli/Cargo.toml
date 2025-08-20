@@ -1,11 +1,11 @@
 [package]
-name = "passport-for-ai"
+name = "ai-passport"
 version = "0.2.0"
 edition.workspace = true
-default-run = "passport-for-ai"
+default-run = "cli"
 
 [lib]
-name = "passport_for_ai"
+name = "ai_passport"
 
 [dependencies]
 # --- CLI & Config ---
@@ -61,8 +61,8 @@ rand = { workspace = true }
 ephemeral-notary = []
 
 [[bin]]
-name = "passport-for-ai"
-path = "src/bin/passport_for_ai.rs"
+name = "cli"
+path = "src/bin/cli.rs"
 
 [[bench]]
 name = "prove_bench"
