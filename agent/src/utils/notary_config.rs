@@ -15,7 +15,7 @@ pub(crate) fn gen_cfg(request_limit: usize, response_limit: usize) -> anyhow::Re
         .server(server_config)
         .inference_route("/v1/chat/completions".to_string())
         .api_key("secret123".to_string())
-        .model_id("openai/gpt-4o-mini")
+        .model_id("demo-gpt-4o-mini")
         .build()
         .expect("model_config");
 

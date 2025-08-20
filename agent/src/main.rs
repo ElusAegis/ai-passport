@@ -20,7 +20,7 @@ async fn main() -> anyhow::Result<()> {
     init_logging();
 
     const KIB: usize = 1024;
-    const LIMIT: usize = 16 * KIB;
+    const LIMIT: usize = 14 * KIB;
 
     let markets = Market::get(3).await?;
     let polymarket_ctx = build_polymarket_context(&markets, 12 * KIB)?;
@@ -40,14 +40,12 @@ async fn main() -> anyhow::Result<()> {
     println!("Decision request size: {} bytes", decision_json.len());
 
     let src = VecInputSource::new(vec![Some(decision_json), None]);
-    let cfg = gen_cfg(LIMIT, 16 * KIB)?;
+    let cfg = gen_cfg(LIMIT, LIMIT + KIB)?;
 
-    with_input_source(src, async {
-        let _ = run_prove(&cfg)
-            .await
-            .map_err(|e| anyhow::anyhow!("Prove failed: {}", e));
-    })
-    .await;
+    if let Err(e) = with_input_source(src, async { run_prove(&cfg).await }).await {
+        eprintln!("❌ Prove failed: {}", e); // pretty format, with causes
+        return Err(e);
+    }
 
     Ok(())
 }
