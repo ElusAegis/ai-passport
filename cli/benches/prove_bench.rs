@@ -469,16 +469,8 @@ fn run_cases(
                 let (max_total_sent, max_total_recv) = cfg.session.max_total_sent_recv();
 
                 let bid = format!(
-                    "{}+{}-{:?}---{}(r-up)-{}(t-up)-{}(r-down)-{}(t-down)-{}(#msg)-{}(#max-msg)",
-                    model.name,
-                    notary.name,
-                    mode,
-                    max_request_size,
-                    max_total_sent,
-                    max_response_size,
-                    max_total_recv,
-                    num_inputs,
-                    max_req_num
+                    "{}+{}-{:?}---{}(#msg)-{}(#max-msg)",
+                    model.name, notary.name, mode, num_inputs, max_req_num
                 );
                 group.throughput(Throughput::Elements(num_inputs as u64));
 
