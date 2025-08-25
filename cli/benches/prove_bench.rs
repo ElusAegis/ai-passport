@@ -1,12 +1,29 @@
 use ai_passport::{
-    run_prove, with_input_source, ModelConfig, NotaryConfig, NotaryMode,
-    PrivacyConfig, ProveConfig, ServerConfig, SessionConfig, SessionMode, VecInputSource,
+    run_prove, with_input_source, ModelConfig, NotaryConfig, NotaryMode, PrivacyConfig,
+    ProveConfig, ServerConfig, SessionConfig, SessionMode, VecInputSource,
 };
-use criterion::{criterion_group, criterion_main, Criterion, SamplingMode, Throughput};
+use criterion::measurement::WallTime;
+use criterion::{
+    criterion_group, criterion_main, BenchmarkGroup, Criterion, SamplingMode, Throughput,
+};
 use rand::distr::Alphanumeric;
 use rand::Rng;
 use std::time::Duration;
 use tlsn_common::config::NetworkSetting;
+
+fn ensure_tracing() {
+    use tracing_subscriber::EnvFilter;
+    static START: std::sync::Once = std::sync::Once::new();
+    START.call_once(|| {
+        let _ = tracing_subscriber::fmt()
+            .with_env_filter(EnvFilter::from_default_env())
+            .with_writer(std::io::stderr)
+            .with_ansi(true)
+            .with_line_number(true)
+            .with_file(true)
+            .try_init();
+    });
+}
 
 // ───────────────────────────────────────────────────────────────────────────────
 // Presets and pairings
@@ -113,6 +130,18 @@ fn notary_presets() -> Vec<NotaryPreset> {
                 max_recv_bytes: 16 * KIB,
             },
         },
+        // PSE notary: sent=4 MiB, recv=16 MiB
+        NotaryPreset {
+            name: "notary-pse-tee",
+            domain: "notary.pse.dev",
+            port: 443,
+            version_path: "v0.1.0-alpha.12-sgx",
+            mode: NotaryMode::RemoteTLS,
+            caps: NotaryCaps {
+                max_sent_bytes: 4 * KIB,
+                max_recv_bytes: 16 * KIB,
+            },
+        },
     ]
 }
 
@@ -120,7 +149,7 @@ fn notary_presets() -> Vec<NotaryPreset> {
 // 1) local+local
 // 2) pse + redpill
 #[allow(unused)]
-fn pairings() -> Vec<(ModelPreset, NotaryPreset)> {
+fn standard_pairings() -> Vec<(ModelPreset, NotaryPreset)> {
     let models = model_presets();
     let notaries = notary_presets();
 
@@ -157,9 +186,82 @@ fn pairings() -> Vec<(ModelPreset, NotaryPreset)> {
         .clone();
 
     vec![
-        (poa_local, notary_local),
-        // (redpill_3b, notary_remote.clone()),
+        (poa_local.clone(), notary_remote.clone()),
+        (redpill_3b, notary_remote),
         // (redpill_8b, notary_remote),
+    ]
+}
+
+// Explicit pairing list ONLY (no cross product)
+// 1) local+local
+// 2) pse + redpill
+fn model_comparison_pairings() -> Vec<(ModelPreset, NotaryPreset)> {
+    let models = model_presets();
+    let notaries = notary_presets();
+
+    let redpill_3b = models
+        .iter()
+        .find(|m| m.name == "redpill-remote-3b")
+        .unwrap()
+        .clone();
+    let redpill_8b = models
+        .iter()
+        .find(|m| m.name == "redpill-remote-8b")
+        .unwrap()
+        .clone();
+
+    let notary_remote = notaries
+        .iter()
+        .find(|n| n.name == "notary-remote")
+        .unwrap()
+        .clone();
+    let notary_pse = notaries
+        .iter()
+        .find(|n| n.name == "notary-pse")
+        .unwrap()
+        .clone();
+
+    vec![
+        (redpill_8b.clone(), notary_remote.clone()),
+        (redpill_3b.clone(), notary_pse.clone()),
+        (redpill_8b, notary_pse),
+        (redpill_3b, notary_remote),
+    ]
+}
+
+// Explicit pairing list ONLY (no cross product)
+// 1) local+local
+// 2) pse + redpill
+fn notary_comparison_pairings() -> Vec<(ModelPreset, NotaryPreset)> {
+    let models = model_presets();
+    let notaries = notary_presets();
+
+    let redpill_3b = models
+        .iter()
+        .find(|m| m.name == "redpill-remote-3b")
+        .unwrap()
+        .clone();
+
+    let notary_remote = notaries
+        .iter()
+        .find(|n| n.name == "notary-remote")
+        .unwrap()
+        .clone();
+    let notary_pse = notaries
+        .iter()
+        .find(|n| n.name == "notary-pse")
+        .unwrap()
+        .clone();
+    let notary_pse_tee = notaries
+        .iter()
+        .find(|n| n.name == "notary-pse-tee")
+        .unwrap()
+        .clone();
+
+    vec![
+        (redpill_3b.clone(), notary_remote),
+        (redpill_3b.clone(), notary_pse),
+        (redpill_3b, notary_pse_tee),
     ]
 }
 
@@ -262,31 +364,90 @@ fn build_prove_config(
 // Criterion benchmark
 // ───────────────────────────────────────────────────────────────────────────────
 
-pub fn prove_benchmarks(c: &mut Criterion) {
-    let mut group = c.benchmark_group("run_prove");
+pub fn optimized_regular_benchmark_known_size(c: &mut Criterion) {
+    let mut group = c.benchmark_group("benches_known_conv_size");
     group.sampling_mode(SamplingMode::Flat);
     group.sample_size(10);
     group.measurement_time(Duration::from_secs(10));
 
     // Initiate logger from tracing using env and error as backup
-    tracing_subscriber::fmt()
-        .with_env_filter(tracing_subscriber::EnvFilter::from_default_env())
-        .with_writer(std::io::stderr)
-        .with_ansi(true)
-        .with_line_number(true)
-        .with_file(true)
-        .init();
+    ensure_tracing();
 
     // Input batches and aligned max-req constraints
-    let input_cases: &[(usize, usize)] = &[(4, 4), (8, 8)];
+    let input_cases: &[(usize, usize)] = &[(1, 1), (2, 2), (4, 4), (8, 8)];
     let modes = &[SessionMode::Single, SessionMode::Multi];
 
+    run_cases(&mut group, input_cases, modes, standard_pairings());
+
+    group.finish();
+}
+
+pub fn optimized_regular_benchmark_unknown_size(c: &mut Criterion) {
+    let mut group = c.benchmark_group("benches_unknown_conv_size");
+    group.sampling_mode(SamplingMode::Flat);
+    group.sample_size(10);
+    group.measurement_time(Duration::from_secs(10));
+
+    // Initiate logger from tracing using env and error as backup
+    ensure_tracing();
+
+    // Input batches and aligned max-req constraints
+    let input_cases: &[(usize, usize)] = &[(1, 4), (2, 4), (3, 4), (4, 4)];
+    let modes = &[SessionMode::Single, SessionMode::Multi];
+
+    run_cases(&mut group, input_cases, modes, standard_pairings());
+
+    group.finish();
+}
+
+pub fn model_comparison_benchmark(c: &mut Criterion) {
+    let mut group = c.benchmark_group("benches_models");
+    group.sampling_mode(SamplingMode::Flat);
+    group.sample_size(10);
+    group.measurement_time(Duration::from_secs(10));
+
+    // Initiate logger from tracing using env and error as backup
+    ensure_tracing();
+
+    // Input batches and aligned max-req constraints
+    let input_cases: &[(usize, usize)] = &[(1, 1), (2, 2), (4, 4)];
+    let modes = &[SessionMode::Single];
+
+    run_cases(&mut group, input_cases, modes, model_comparison_pairings());
+
+    group.finish();
+}
+
+pub fn notary_comparison_benchmark(c: &mut Criterion) {
+    let mut group = c.benchmark_group("benches_notaries");
+    group.sampling_mode(SamplingMode::Flat);
+    group.sample_size(10);
+    group.measurement_time(Duration::from_secs(10));
+
+    // Initiate logger from tracing using env and error as backup
+    ensure_tracing();
+
+    // Input batches and aligned max-req constraints
+    let input_cases: &[(usize, usize)] = &[(1, 1), (2, 2), (4, 4)];
+    let modes = &[SessionMode::Single];
+
+    run_cases(&mut group, input_cases, modes, notary_comparison_pairings());
+
+    group.finish();
+}
+
+fn run_cases(
+    group: &mut BenchmarkGroup<WallTime>,
+    input_cases: &[(usize, usize)],
+    modes: &[SessionMode],
+    pairings: Vec<(ModelPreset, NotaryPreset)>,
+) {
     for &(num_inputs, max_req_num) in input_cases {
-        for (model, notary) in pairings() {
+        for (model, notary) in &pairings {
             for &mode in modes {
                 // Base per-message sizes (your “approx” starting point)
-                let max_request_size = 800;
-                let max_response_size = 850;
+                let max_request_size = 500;
+                let max_response_size = 800;
 
                 // First attempt at base size; skip pair if even the base doesn’t fit
                 let cfg = match build_prove_config(
@@ -345,9 +506,16 @@ pub fn prove_benchmarks(c: &mut Criterion) {
             }
         }
     }
-
-    group.finish();
 }
 
-criterion_group!(benches, prove_benchmarks);
-criterion_main!(benches);
+criterion_group!(benches_known, optimized_regular_benchmark_known_size);
+criterion_group!(benches_unknown, optimized_regular_benchmark_unknown_size);
+criterion_group!(benches_models, model_comparison_benchmark);
+criterion_group!(benches_notaries, notary_comparison_benchmark);
+
+criterion_main!(
+    benches_known,
+    benches_unknown,
+    benches_models,
+    benches_notaries
+);
