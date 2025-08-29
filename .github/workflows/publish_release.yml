@@ -4,111 +4,110 @@ on:
   workflow_dispatch:
     inputs:
       release_version:
-        description: "Version to release"
+        description: "Version to release (tag)"
         required: false
+
+permissions:
+  contents: write
 
 jobs:
   build:
     runs-on: ${{ matrix.os }}
     strategy:
+      fail-fast: false
       matrix:
         include:
           - os: ubuntu-latest
             target: x86_64-unknown-linux-gnu
+            use_cross: false
           - os: ubuntu-latest
             target: aarch64-unknown-linux-gnu
+            use_cross: true
           - os: macos-latest
             target: x86_64-apple-darwin
+            use_cross: false
 
     steps:
-    - name: Checkout repository
-      uses: actions/checkout@v2
+      - name: Checkout
+        uses: actions/checkout@v4
 
-    - name: Install Rust
-      uses: actions-rs/toolchain@v1
-      with:
-        toolchain: stable
+      - name: Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
 
-    - name: Install cross for aarch64
-      if: matrix.target == 'aarch64-unknown-linux-gnu'
-      run: cargo install cross
+      - name: Cache cargo
+        uses: Swatinem/rust-cache@v2
+        with:
+          save-if: ${{ github.ref == 'refs/heads/main' }}
 
-    - name: Install target
-      run: rustup target add ${{ matrix.target }}
+      - name: Install build deps (Linux)
+        if: startsWith(matrix.target, 'x86_64-unknown-linux') || startsWith(matrix.target, 'aarch64-unknown-linux')
+        run: sudo apt-get update && sudo apt-get install -y pkg-config libssl-dev
 
-    - name: Build for ${{ matrix.target }}
-      run: |
-          cross build --release --target ${{ matrix.target }};
+      - name: Install cross
+        if: matrix.use_cross
+        run: cargo install cross --locked
 
+      - name: Build (release)
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ "${{ matrix.use_cross }}" = "true" ]; then
+            cross build --release --target ${{ matrix.target }} --workspace --bins --message-format=json > build.jsonl
+          else
+            cargo build --release --target ${{ matrix.target }} --workspace --bins --message-format=json > build.jsonl
+          fi
 
-    - name: Upload build artifacts
-      uses: actions/upload-artifact@v3
-      with:
-        name: build-artifacts-${{ matrix.target }}
-        path: ./target/${{ matrix.target }}/release
-        
-  create_release:
-    runs-on: ubuntu-latest
-    needs: build
+      - name: Stage binaries
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p dist/${{ matrix.target }}
+          # extract built executables from cargo JSON
+          mapfile -t EXES < <(jq -r 'select(.reason=="compiler-artifact" and (.target.kind|index("bin")) and .executable!=null) | .executable' build.jsonl | sort -u)
+          if [ ${#EXES[@]} -eq 0 ]; then
+            echo "No executables found"; sed -n '1,120p' build.jsonl || true; exit 1
+          fi
+          for exe in "${EXES[@]}"; do
+            cp "$exe" "dist/${{ matrix.target }}/$(basename "$exe")"
+          done
+          ls -l dist/${{ matrix.target }}
+
+      - name: Package (tar.gz)
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p packages
+          tar -czf packages/passport-for-ai-${{ matrix.target }}.tar.gz -C dist/${{ matrix.target }} .
+          ls -l packages
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-${{ matrix.target }}
+          path: packages/*.tar.gz
+          if-no-files-found: error
+          retention-days: 14
+
+  release:
     if: github.event.inputs.release_version != ''
+    needs: build
+    runs-on: ubuntu-latest
     steps:
-    - name: Checkout repository
-      uses: actions/checkout@v2
+      - name: Download all build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: build-*
+          path: dist
+          merge-multiple: true
 
-    - name: Create Release
-      id: create_release
-      uses: actions/create-release@v1
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      with:
-        tag_name: ${{ github.event.inputs.release_version }}
-        release_name: "Release ${{ github.event.inputs.release_version }}"
-        draft: false
-        prerelease: false
-
-    - name: Save upload_url to a file
-      run: echo "${{ steps.create_release.outputs.upload_url }}" > upload_url.txt
-
-    - name: Upload upload_url artifact
-      uses: actions/upload-artifact@v3
-      with:
-        name: upload_url
-        path: upload_url.txt
-
-  upload_binaries:
-    runs-on: ${{ matrix.os }}
-    needs: [build, create_release]
-    strategy:
-      matrix:
-        include:
-          - os: ubuntu-latest
-            target: x86_64-unknown-linux-gnu
-          - os: ubuntu-latest
-            target: aarch64-unknown-linux-gnu
-          - os: macos-latest
-            target: x86_64-apple-darwin
-
-    steps:
-    - name: Download build artifacts
-      uses: actions/download-artifact@v3
-      with:
-        name: build-artifacts-${{ matrix.target }}
-
-    - name: Download upload_url artifact
-      uses: actions/download-artifact@v3
-      with:
-        name: upload_url
-
-    - name: Read upload_url from file
-      id: read_upload_url
-      run: echo "UPLOAD_URL=$(cat upload_url.txt)" >> $GITHUB_ENV
-
-    - name: Upload Executable Binaries
-      uses: actions/upload-release-asset@v1
-      with:
-        upload_url: ${{ env.UPLOAD_URL }}
-        asset_path: ./cli
-        asset_name: passport-for-ai-${{ matrix.target }}
-        asset_content_type: application/octet-stream
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Create GitHub Release and upload assets
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.event.inputs.release_version }}
+          name: Release ${{ github.event.inputs.release_version }}
+          draft: false
+          prerelease: false
+          files: |
+            dist/*.tar.gz
