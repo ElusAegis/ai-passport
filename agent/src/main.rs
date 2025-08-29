@@ -47,5 +47,7 @@ async fn main() -> anyhow::Result<()> {
         return Err(e);
     }
 
+    println!("Success! ✅");
+
     Ok(())
 }
