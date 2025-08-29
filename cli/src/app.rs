@@ -6,7 +6,7 @@ use crate::verify::run_verify;
 use clap::Parser;
 
 pub enum Application {
-    Prove(ProveConfig),
+    Prove(Box<ProveConfig>),
     Verify(VerifyConfig),
 }
 
@@ -18,7 +18,9 @@ impl Application {
         let cli = Cli::parse();
 
         let application = match cli.cmd {
-            Command::Prove(prove_args) => Application::Prove(ProveConfig::setup(prove_args).await?),
+            Command::Prove(prove_args) => {
+                Application::Prove(Box::new(ProveConfig::setup(prove_args).await?))
+            }
             Command::Verify(verify_args) => Application::Verify(VerifyConfig::setup(verify_args)?),
         };
 

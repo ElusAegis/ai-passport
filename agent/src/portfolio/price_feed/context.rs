@@ -106,9 +106,9 @@ recent-updates elsewhere. Use your own world knowledge and price feeds if prices
     }
     if s.len() > max_bytes {
         // drop agg
-        env["pf"].as_object_mut().map(|o| {
+        if let Some(o) = env["pf"].as_object_mut() {
             o.remove("agg");
-        });
+        }
         s = serde_json::to_string(&env).unwrap();
     }
     if s.len() > max_bytes {

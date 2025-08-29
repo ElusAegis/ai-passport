@@ -15,7 +15,6 @@ use std::path::PathBuf;
 use tracing::info;
 
 mod load;
-mod model;
 pub mod notary;
 pub mod privacy;
 
@@ -334,8 +333,7 @@ impl VerifyConfig {
         let raw_path = args.proof_path.unwrap_or(load_proof_path()?);
 
         // Prefer a canonical absolute path if possible
-        let path = PathBuf::from(raw_path);
-        let path = std::fs::canonicalize(&path).unwrap_or(path);
+        let path = std::fs::canonicalize(&raw_path).unwrap_or(raw_path);
 
         // Consistent, concise summary line
         info!(target: "plain",

@@ -161,7 +161,7 @@ fn fixed_reply(req: &ChatRequest) -> String {
 
 async fn list_models(State(state): State<AppState>) -> Json<ModelList> {
     Json(ModelList {
-        object: "list".into(),
+        object: "list",
         data: state.models.to_vec(),
     })
 }

@@ -45,7 +45,7 @@ pub async fn setup(
         .context("Error building prover configuration")?;
 
     // Create a new prover and set up the MPC backend.
-    let prover = init_prover(prover_config, &nc)
+    let prover = init_prover(prover_config, nc)
         .await
         .context("Error setting up notary connection for the prover")?;
 

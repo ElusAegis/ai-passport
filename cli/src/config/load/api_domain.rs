@@ -63,7 +63,7 @@ fn prompt_for_api_domain(term: &Term) -> Result<String> {
         .validate_with(|input: &String| -> std::result::Result<(), String> {
             validate_api_domain(input).map_err(|e| e.to_string())
         })
-        .interact_text_on(&term)
+        .interact_text_on(term)
         .context("Failed to read Model API domain")?;
 
     // Remove the help + prompt line from the screen
