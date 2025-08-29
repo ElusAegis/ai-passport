@@ -38,11 +38,8 @@ jobs:
 
     - name: Build for ${{ matrix.target }}
       run: |
-        if [[ "${{ matrix.target }}" == "aarch64-unknown-linux-gnu" ]]; then
           cross build --release --target ${{ matrix.target }};
-        else
-          cargo build --release --target ${{ matrix.target }};
-        fi
+
 
     - name: Upload build artifacts
       uses: actions/upload-artifact@v3
@@ -110,7 +107,7 @@ jobs:
       uses: actions/upload-release-asset@v1
       with:
         upload_url: ${{ env.UPLOAD_URL }}
-        asset_path: ./passport-for-ai
+        asset_path: ./cli
         asset_name: passport-for-ai-${{ matrix.target }}
         asset_content_type: application/octet-stream
       env:

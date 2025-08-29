@@ -1,63 +1,71 @@
-[package]
-name = "passport-for-ai"
-version = "0.2.0"
+[workspace]
+members = ["agent",
+    "cli",
+    "model-server",
+    "notary",
+]
+resolver = "2"
+
+[workspace.package]
 edition = "2021"
-default-run = "passport-for-ai"
 
-[lib]
-name = "passport_for_ai"
+# One source of truth for versions & common features
+[workspace.dependencies]
+# --- Core & utils ---
+anyhow = "1"
+derive_builder = "0.20.2"
+hex = "0.4.3"
+dotenvy = "0.15.7"
 
-[dependencies]
-clap = { version = "4.0", features = ["derive"] }
-hex = "0.4"
+# --- CLI & UX ---
+clap = { version = "4.5", features = ["derive", "env"] }
+dialoguer = { version = "0.11.0", features = ["fuzzy-select"] }
+indicatif = "0.18.0"
+
+# --- Async ---
+tokio = { version = "1.40", features = ["rt", "rt-multi-thread", "macros"] }
+tokio-util = "0.7"
+futures = "0.3"
+
+# --- Time & data ---
+chrono = { version = "0.4", features = ["alloc", "now"], default-features = false }
+
+# --- Serde ---
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
-tokio = { version = "1.40", features = ["rt", "rt-multi-thread", "macros"] }
-chrono = { version = "0.4", features = ["alloc", "now"], default-features = false }
-anyhow = "1.0.93"
 
-# Local AI Passport dependencies
-ezkl = { git = "https://github.com/zkonduit/ezkl.git", tag = "v13.0.2", optional = true }
-temp-dir = { version = "0.1", optional = true }
-sha3 = { version = "0.10", optional = true }
-base64 = { version = "0.22.1", optional = true }
+# --- Logging ---
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt"] }
 
-# Remote AI Passport dependencies
-tlsn-core = { git = "https://github.com/tlsnotary/tlsn", package = "tlsn-core", tag = "v0.1.0-alpha.6", optional = true }
-tlsn-prover = { git = "https://github.com/tlsnotary/tlsn", package = "tlsn-prover", tag = "v0.1.0-alpha.6", optional = true, features = ["formats"] }
-tlsn-verifier = { git = "https://github.com/tlsnotary/tlsn", package = "tlsn-verifier", tag = "v0.1.0-alpha.6", optional = true }
-tlsn-formats = { git = "https://github.com/tlsnotary/tlsn", package = "tlsn-formats", tag = "v0.1.0-alpha.6", optional = true }
-notary-client = { git = "https://github.com/tlsnotary/tlsn", package = "notary-client", tag = "v0.1.0-alpha.6", optional = true }
-spansy = { git = "https://github.com/tlsnotary/tlsn-utils", package = "spansy", rev = "45370cc", optional = true }
-dotenv = { version = "0.15.0", optional = true }
-hyper = { version = "1.1", features = ["client", "http1"], optional = true }
-hyper-util = { version = "0.1", features = ["full"], optional = true }
-http-body-util = { version = "0.1.2", optional = true }
-tokio-util = { version = "0.7", optional = true }
-p256 = { version = "0.13", features = ["ecdsa"], optional = true }
-futures = { version = "0.3", optional = true }
-tracing = { version = "0.1", optional = true }
-tracing-subscriber = { version = "0.3", optional = true }
-once_cell = { version = "1.20.2", optional = true }
-hyper-tls = { version = "0.6.0", optional = true }
+# --- Crypto ---
+k256 = "0.13"
 
-[features]
-default = ["dummy-notary", "local"]
-local = ["ezkl", "temp-dir", "sha3", "base64"]
-remote = ["tlsn-core", "tlsn-prover", "tlsn-verifier", "notary-client", "dotenv", "hyper", "hyper-util", "http-body-util", "tokio-util", "tracing", "tracing-subscriber", "spansy", "tlsn-formats", "p256", "futures", "once_cell", "hyper-tls"]
-dummy-notary = ["remote"]
+# --- HTTP client stack (passport-for-ai) ---
+hyper = { version = "1.6", features = ["client", "http1"] }
+hyper-util = { version = "0.1", features = ["full"] }
+http-body-util = "0.1"
+hyper-rustls = { version = "0.27", features = ["http1", "native-tokio"] }
 
-[[bin]]
-name = "passport-for-ai"
-path = "src/bin/passport_for_ai.rs"
+# --- TLSNotary (git) ---
+tlsn-core = { git = "https://github.com/tlsnotary/tlsn", tag = "v0.1.0-alpha.12" }
+tlsn-prover = { git = "https://github.com/tlsnotary/tlsn", tag = "v0.1.0-alpha.12" }
+tlsn-verifier = { git = "https://github.com/tlsnotary/tlsn", tag = "v0.1.0-alpha.12" }
+tlsn-formats = { git = "https://github.com/tlsnotary/tlsn", tag = "v0.1.0-alpha.12" }
+tlsn-common = { git = "https://github.com/tlsnotary/tlsn", tag = "v0.1.0-alpha.12" }
+notary-client = { git = "https://github.com/tlsnotary/tlsn", tag = "v0.1.0-alpha.12" }
+spansy = { git = "https://github.com/tlsnotary/tlsn-utils", rev = "6168663" }
 
-# We need to patch the following two URLs to have a consistent version throughout the project
-[patch.'https://github.com/zkonduit/halo2']
-halo2_proofs = { git = "https://github.com/zkonduit//halo2.git", package = "halo2_proofs", branch = "ac/cache-lookup-commitments" }
+# --- Server stack (dummy-model-server) ---
+axum = "0.8.4"
+axum-server = { version = "0.7.2", features = ["tls-rustls"] }
+rustls = "0.23.31"
+rustls-pemfile = "2.2.0"
+tower-http = { version = "0.6.6", features = ["cors", "trace"] }
 
-# We need to also patch the halo2_proofs with the following URL as it is hardcoded in `ezkl` dependency list
-[patch.'https://github.com/zkonduit/halo2?branch=ac/cache-lookup-commitments#8b13a0d2a7a34d8daab010dadb2c47dfa47d37d0']
-halo2_proofs = { git = "https://github.com/zkonduit//halo2.git", package = "halo2_proofs", branch = "ac/cache-lookup-commitments" }
-
-[patch."https://github.com/tlsnotary/tlsn"]
-notary-client = { git = "https://github.com/ElusAegis/tlsn/", package = "notary-client", branch = "fix/allow-url-path-for-notary" }
+# --- Dev ---
+criterion = "0.7.0"
+rand = "0.9.1"
+uuid = { version = "1", features = ["v4"] }
+subtle = "2.6.1"
+time = "0.3"

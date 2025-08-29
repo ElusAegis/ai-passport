@@ -3,4 +3,8 @@
 /model/*.json
 !/model/input.json
 /.env
-/claud_conversation_proof.json
+proofs/
+_interaction_proof_*.json
+
+model-server/cert/*
+/notary/tls/
