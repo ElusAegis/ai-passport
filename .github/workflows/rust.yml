@@ -149,7 +149,7 @@ jobs:
             MODEL_API_DOMAIN="$MODEL_API_DOMAIN" \
             MODEL_API_PORT="$MODEL_API_PORT" \
             MODEL_API_KEY="$MODEL_API_KEY" \
-            ./bin/cli prove --model-id demo-gpt-4o-minid
+            ./bin/cli prove --model-id demo-gpt-4o-mini
             
       - name: Find generated proof file (and save artifact)
         id: find_proof
@@ -216,4 +216,4 @@ jobs:
           if [ -z "$PROOF" ]; then
             echo "Downloaded proof artifact is missing"; ls -R proof; exit 1
           fi
-          printf "YES\n" | ./bin/cli verify "$PROOF"
+          ./bin/cli verify "$PROOF" --accept-key

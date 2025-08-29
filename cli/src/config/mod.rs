@@ -330,7 +330,11 @@ impl VerifyConfig {
     }
 
     pub(crate) fn setup(args: VerifyArgs) -> Result<VerifyConfig> {
-        let raw_path = args.proof_path.unwrap_or(load_proof_path()?);
+        let raw_path = if let Some(path) = args.proof_path {
+            path
+        } else {
+            load_proof_path()?
+        };
 
         // Prefer a canonical absolute path if possible
         let path = std::fs::canonicalize(&raw_path).unwrap_or(raw_path);
