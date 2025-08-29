@@ -153,11 +153,6 @@ fn standard_pairings() -> Vec<(ModelPreset, NotaryPreset)> {
     let models = model_presets();
     let notaries = notary_presets();
 
-    let poa_local = models
-        .iter()
-        .find(|m| m.name == "poa-local")
-        .unwrap()
-        .clone();
     let redpill_3b = models
         .iter()
         .find(|m| m.name == "redpill-remote-3b")
@@ -186,9 +181,8 @@ fn standard_pairings() -> Vec<(ModelPreset, NotaryPreset)> {
         .clone();
 
     vec![
-        (poa_local.clone(), notary_remote.clone()),
-        (redpill_3b, notary_remote),
-        // (redpill_8b, notary_remote),
+        (redpill_3b.clone(), notary_remote.clone()),
+        (redpill_3b, notary_pse),
     ]
 }
 
@@ -447,7 +441,7 @@ fn run_cases(
             for &mode in modes {
                 // Base per-message sizes (your “approx” starting point)
                 let max_request_size = 500;
-                let max_response_size = 800;
+                let max_response_size = 1000;
 
                 // First attempt at base size; skip pair if even the base doesn’t fit
                 let cfg = match build_prove_config(
