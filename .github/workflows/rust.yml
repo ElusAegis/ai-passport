@@ -22,75 +22,198 @@ jobs:
         toolchain: nightly
         components: clippy, rustfmt
 
-    - name: Check code formatting
+    - name: System deps (OpenSSL, pkg-config)
+      run: sudo apt-get update && sudo apt-get install -y pkg-config libssl-dev
+
+    - name: Check formatting
       run: cargo fmt -- --check
 
-    - name: Run Clippy
+    - name: Clippy
       run: cargo clippy -- -D warnings
 
-    - name: Build the project
-      run: cargo build --release
+    - name: Build debug (all bins)
+      run: cargo build # --debug
 
-    - name: Upload build artifacts
-      uses: actions/upload-artifact@v3
-      with:
-        name: build-artifacts
-        path: target/release/passport-for-ai
-
-  test-local:
-    needs: build
-    runs-on: ubuntu-latest
-
-    steps:
-    - name: Checkout repository
-      uses: actions/checkout@v2
-
-    - name: Download build artifacts
-      uses: actions/download-artifact@v3
-      with:
-        name: build-artifacts
-
-    - name: Change permissions for the binary
-      run: chmod +x passport-for-ai
-
-    - name: Run local `create-passport`
-      run: ./passport-for-ai local create-passport model/network.onnx --save-to ./model
-
-    - name: Run local `attribute-content`
-      run: ./passport-for-ai local attribute-content model/network.onnx model/input.json --save-to ./model
-
-    - name: Run local `verify-attribution`
-      run: ./passport-for-ai local verify-attribution model/model_network_db9e2eef_passport.json model/model_db9e2eef_attribution_certificate.json
-
-  test-remote:
-    needs: build
-    runs-on: ubuntu-latest
-
-    steps:
-    - name: Checkout repository
-      uses: actions/checkout@v2
-
-    - name: Download build artifacts
-      uses: actions/download-artifact@v3
-      with:
-        name: build-artifacts
-
-    - name: Change permissions for the binary
-      run: chmod +x passport-for-ai
-
-    - name: Run remote `attributed-conversation`
-      shell: bash
-      run: printf "1\nHello ChatGPT\nexit\n" | ./passport-for-ai remote attributed-conversation
-      env:
-        REDPILL_API_KEY: ${{ secrets.REDPILL_API_KEY }}
-
-    - name: Find generated proof file
-      id: find_proof
+    # Stage only the binaries you care about, if they exist.
+    - name: Stage artefacts
       run: |
-        # Find the generated proof file with model type and timestamp
-        PROOF_FILE=$(find . -name '*_conversation_proof.json' -type f | head -n 1)
-        echo "proof_file=$PROOF_FILE" >> $GITHUB_ENV
-        echo "Found proof file: $PROOF_FILE"
+        mkdir -p artefacts
+        for b in cli notary model-server agent; do
+           cp "target/release/$b" "artefacts/$b"
+        done
+        ls -l artefacts || true
 
-    - name: Run remote `verify-attribution`
-      run: ./passport-for-ai remote verify-attribution "$proof_file"
+
+    - name: Upload artefacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: bins-${{ runner.os }}-${{ runner.arch }}
+        path: artefacts/*
+
+  test-local-cli:
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    env:
+      # NOTARY env
+      NOTARY_DOMAIN: "localhost"
+      NOTARY_PORT: "7047"
+      NOTARY_VERSION: ""
+      NOTARY_TYPE: "remote_non_tls"
+      # Model API env (override key via secret if set)
+      MODEL_API_DOMAIN: "api.proof-of-autonomy.elusaegis.xyz"
+      MODEL_API_PORT: "3000"
+      MODEL_API_KEY: "secret123"
+      # TLS materialisation paths
+      SERVER_TLS_CERT: model-server/cert/api.proof-of-autonomy.elusaegis.xyz/fullchain.pem
+      SERVER_TLS_KEY:  model-server/cert/api.proof-of-autonomy.elusaegis.xyz/privkey.pem
+
+    steps:
+      - name: Checkout (for scripts/paths, if needed)
+        uses: actions/checkout@v4
+
+      - name: Download artefacts
+        uses: actions/download-artifact@v4
+        with:
+          name: bins-${{ runner.os }}-${{ runner.arch }}
+          path: bin
+
+      - name: Make executables
+        run: chmod +x bin/*
+
+      - name: Show binaries
+        run: ls -l bin
+
+      - name: Materialise TLS certs from secrets
+        shell: bash
+        run: |
+          mkdir -p "$(dirname "$SERVER_TLS_CERT")"
+          mkdir -p "$(dirname "$SERVER_TLS_KEY")"
+          if [ -z "${{ secrets.MODEL_FULLCHAIN_PEM_B64 }}" ] || [ -z "${{ secrets.MODEL_PRIVKEY_PEM_B64 }}" ]; then
+            echo "ERROR: Missing MODEL_FULLCHAIN_PEM_B64 or MODEL_PRIVKEY_PEM_B64." >&2
+            exit 1
+          fi
+          echo "${{ secrets.MODEL_FULLCHAIN_PEM_B64 }}" | base64 -d > "$SERVER_TLS_CERT"
+          echo "${{ secrets.MODEL_PRIVKEY_PEM_B64 }}"  | base64 -d > "$SERVER_TLS_KEY"
+          # Restrict permissions
+          chmod 600 "$SERVER_TLS_KEY"
+          chmod 644 "$SERVER_TLS_CERT"
+
+      - name: Route API domain to localhost
+        run: |
+          echo "127.0.0.1 api.proof-of-autonomy.elusaegis.xyz" | sudo tee -a /etc/hosts
+          echo "Updated /etc/hosts:"
+          tail -n 5 /etc/hosts
+
+      - name: Start model-server (background)
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ ! -x bin/model-server ]; then
+            echo "model-server binary is missing"; exit 1
+          fi
+          # Start; add flags if your server requires them.
+          SERVER_TLS_CERT="$SERVER_TLS_CERT" SERVER_TLS_KEY="$SERVER_TLS_KEY" \
+            nohup ./bin/model-server > model-server.log 2>&1 & echo $! > model-server.pid
+
+
+      - name: Start notary (background)
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ ! -x bin/notary ]; then
+            echo "notary binary is missing"; exit 1
+          fi
+          # If your notary needs explicit port/type flags, add them here.
+            nohup ./bin/notary > notary.log 2>&1 & echo $! > notary.pid
+
+      - name: Wait for services to be ready
+        shell: bash
+        run: |
+          sleep 10
+
+      - name: Run CLI prove
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ ! -x bin/cli ]; then
+            echo "cli binary is missing"; exit 1
+          fi
+          # Feed "Test message" then "exit"
+          printf "Test message\nexit\n" | \
+            NOTARY_DOMAIN="$NOTARY_DOMAIN" \
+            NOTARY_PORT="$NOTARY_PORT" \
+            NOTARY_VERSION="$NOTARY_VERSION" \
+            NOTARY_TYPE="$NOTARY_TYPE" \
+            MODEL_API_DOMAIN="$MODEL_API_DOMAIN" \
+            MODEL_API_PORT="$MODEL_API_PORT" \
+            MODEL_API_KEY="$MODEL_API_KEY" \
+            ./bin/cli prove --model-id demo-gpt-4o-minid
+            
+      - name: Find generated proof file (and save artifact)
+        id: find_proof
+        shell: bash
+        run: |
+          set -e
+          PROOF_FILE=$(find proofs -type f -name '*interaction_proof*.json' | head -n 1)
+          if [ -z "$PROOF_FILE" ]; then
+            echo "No interaction proof found under ./proofs"; ls -R; exit 1
+          fi
+          mkdir -p artefacts
+          cp "$PROOF_FILE" artefacts/interaction_proof.json
+          echo "proof_file=$PROOF_FILE" >> "$GITHUB_OUTPUT"
+          echo "Saved: artefacts/interaction_proof.json"
+
+      - name: Upload proof artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: interaction-proof
+          path: artefacts/interaction_proof.json
+          if-no-files-found: error
+
+      - name: Show logs on failure
+        if: failure()
+        run: |
+          echo "---- notary.log ----" && (sed -n '1,200p' notary.log || true)
+          echo "---- model-server.log ----" && (sed -n '1,200p' model-server.log || true)
+
+      - name: Cleanup background processes
+        if: always()
+        run: |
+          kill $(cat notary.pid 2>/dev/null) 2>/dev/null || true
+          kill $(cat model-server.pid 2>/dev/null) 2>/dev/null || true
+
+
+  verify-proof:
+    needs: test-local-cli
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Download CLI binary
+        uses: actions/download-artifact@v4
+        with:
+          name: bins-${{ runner.os }}-${{ runner.arch }}
+          path: bin
+
+      - name: Download proof artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: interaction-proof
+          path: proof
+
+      - name: Make CLI executable
+        run: chmod +x bin/cli
+
+      - name: Verify proof with CLI
+        shell: bash
+        run: |
+          set -euo pipefail
+          PROOF=$(find proof -type f -name '*.json' | head -n 1)
+          if [ -z "$PROOF" ]; then
+            echo "Downloaded proof artifact is missing"; ls -R proof; exit 1
+          fi
+          printf "YES\n" | ./bin/cli verify "$PROOF"
