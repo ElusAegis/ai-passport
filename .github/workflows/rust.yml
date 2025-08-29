@@ -39,7 +39,7 @@ jobs:
       run: |
         mkdir -p artefacts
         for b in cli notary model-server agent; do
-           cp "target/release/$b" "artefacts/$b"
+           cp "target/debug/$b" "artefacts/$b"
         done
         ls -l artefacts || true
 
