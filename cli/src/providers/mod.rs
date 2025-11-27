@@ -1,8 +1,10 @@
 mod anthropic;
+mod mistral;
 mod redpill;
 mod unknown;
 
 pub use anthropic::Anthropic;
+pub use mistral::Mistral;
 pub use redpill::Redpill;
 pub use unknown::Unknown;
 
@@ -58,6 +60,7 @@ pub trait Provider {
 pub enum ApiProvider {
     Unknown,
     Anthropic,
+    Mistral,
     Redpill,
 }
 
@@ -66,6 +69,8 @@ impl ApiProvider {
     pub fn from_domain(domain: &str) -> Self {
         if domain.contains("anthropic") {
             Anthropic.into()
+        } else if domain.contains("mistral") {
+            Mistral.into()
         } else if domain.contains("red-pill") {
             Redpill.into()
         } else {
