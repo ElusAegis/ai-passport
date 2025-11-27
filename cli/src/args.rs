@@ -58,9 +58,13 @@ pub(crate) struct ProveArgs {
     )]
     pub(crate) env_file: PathBuf,
 
-    /// Model API route to get a model list (optional for proving)
-    #[arg(long, env = "MODEL_LIST_ROUTE", default_value = "/v1/models")]
-    pub(crate) model_list_route: String,
+    /// Model API route to get a model list (optional - defaults to provider-specific endpoint)
+    #[arg(long, env = "MODEL_LIST_ROUTE")]
+    pub(crate) model_list_route: Option<String>,
+
+    /// Model API route for chat/inference requests (optional - defaults to provider-specific endpoint)
+    #[arg(long, env = "MODEL_CHAT_ROUTE")]
+    pub(crate) model_chat_route: Option<String>,
 
     /// Maximum expected number of requests to send
     #[arg(

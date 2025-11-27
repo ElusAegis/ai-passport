@@ -7,7 +7,7 @@ use crate::config::{
     notary::NotaryConfig,
     privacy::PrivacyConfig,
 };
-use crate::providers::ApiProvider;
+use crate::providers::{ApiProvider, Provider};
 use anyhow::{Context, Result};
 use derive_builder::Builder;
 use dialoguer::console::style;
@@ -153,13 +153,19 @@ impl ProveConfig {
 
         let model_id = match args.model_id {
             Some(id) => id,
-            None => load_model_id(&server_config, &api_key)
+            None => load_model_id(&server_config, &api_key, args.model_list_route.as_deref())
                 .await
                 .context("Failed to select model")?,
         };
 
+        let provider = server_config.provider();
+        let chat_route = args
+            .model_chat_route
+            .unwrap_or_else(|| provider.chat_endpoint().to_string());
+
         let model_config = ModelConfig::builder()
             .server(server_config)
+            .inference_route(chat_route)
             .api_key(api_key)
             .model_id(model_id)
             .build()
@@ -215,13 +221,10 @@ impl ProveConfig {
             kv(
                 "Model Inference API",
                 format!(
-                    "{}:{}/{}",
+                    "{}:{}{}",
                     config.model.server.domain,
                     config.model.server.port,
-                    config
-                        .model
-                        .inference_route
-                        .trim_start_matches('/')
+                    config.model.inference_route,
                 ),
             )
         );
