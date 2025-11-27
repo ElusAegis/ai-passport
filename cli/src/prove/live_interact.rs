@@ -7,7 +7,7 @@ use anyhow::Result;
 use dialoguer::console::style;
 use http_body_util::BodyExt;
 use hyper::client::conn::http1::SendRequest;
-use hyper::header::{ACCEPT_ENCODING, CONNECTION, CONTENT_TYPE, HOST};
+use hyper::header::{ACCEPT_ENCODING, CONNECTION, CONTENT_TYPE, HOST, TRANSFER_ENCODING};
 use hyper::{Method, Request, StatusCode};
 use serde_json::Value;
 use tracing::{debug, info};
@@ -82,6 +82,19 @@ async fn get_response(
         anyhow::bail!("Request failed with status: {}", response.status());
     }
 
+    // Check for Transfer-Encoding header (TLSNotary doesn't support chunked)
+    if let Some(te) = response.headers().get(TRANSFER_ENCODING) {
+        if te
+            .to_str()
+            .is_ok_and(|te| te.eq_ignore_ascii_case("chunked"))
+        {
+            anyhow::bail!(
+                "Server returned Transfer-Encoding: chunked which is not supported by TLSNotary. \
+                 Ensure streaming is disabled in the request."
+            );
+        }
+    }
+
     // Collect the body (only on normal path)
     let payload = response
         .into_body()
@@ -112,7 +125,9 @@ pub(crate) fn generate_request(
     close_connection: bool,
 ) -> Result<Request<String>> {
     let provider = model_settings.server.provider();
+    debug!("Using provider: {:?}", provider);
     let json_body = provider.build_chat_body(&model_settings.model_id, messages);
+    debug!("Request body: {}", json_body);
 
     let mut builder = Request::builder()
         .method(Method::POST)
