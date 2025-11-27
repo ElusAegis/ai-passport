@@ -7,6 +7,7 @@ use crate::config::{
     notary::NotaryConfig,
     privacy::PrivacyConfig,
 };
+use crate::providers::ApiProvider;
 use anyhow::{Context, Result};
 use derive_builder::Builder;
 use dialoguer::console::style;
@@ -35,6 +36,10 @@ pub struct ServerConfig {
 impl ServerConfig {
     pub fn builder() -> ServerConfigBuilder {
         ServerConfigBuilder::default()
+    }
+
+    pub fn provider(&self) -> ApiProvider {
+        ApiProvider::from_domain(&self.domain)
     }
 }
 
@@ -123,7 +128,6 @@ impl SessionConfig {
 #[builder(pattern = "owned")]
 pub struct ProveConfig {
     pub(crate) model: ModelConfig,
-    #[builder(default)]
     pub(crate) privacy: PrivacyConfig,
     pub notary: NotaryConfig,
     pub session: SessionConfig,
@@ -140,7 +144,6 @@ impl ProveConfig {
         let api_domain = load_api_domain().context("Failed to load API domain")?;
         let api_key = load_api_key().context("Failed to load API key")?;
         let api_port = load_api_port().context("Failed to load API port")?;
-        let model_list_route = args.model_list_route;
 
         let server_config = ServerConfig::builder()
             .domain(api_domain.clone())
@@ -150,7 +153,7 @@ impl ProveConfig {
 
         let model_id = match args.model_id {
             Some(id) => id,
-            None => load_model_id(&server_config, &model_list_route)
+            None => load_model_id(&server_config, &api_key)
                 .await
                 .context("Failed to select model")?,
         };
@@ -179,8 +182,8 @@ impl ProveConfig {
             .finalize_for_session(&session_config)?;
 
         let config: Self = Self::builder()
-            .model(model_config)
-            .privacy(PrivacyConfig::default())
+            .model(model_config.clone())
+            .privacy(model_config.server.provider().into())
             .session(session_config)
             .notary(notary_config)
             .build()?;

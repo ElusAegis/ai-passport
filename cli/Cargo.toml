@@ -51,6 +51,7 @@ tracing-subscriber = { workspace = true }
 # --- Misc ---
 anyhow = { workspace = true }
 derive_builder = { workspace = true }
+enum_dispatch = "0.3"
 hex = { workspace = true }
 
 [dev-dependencies]

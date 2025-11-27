@@ -1,12 +1,15 @@
 use ai_passport::{
-    ModelConfig, NetworkSetting, NotaryConfig, NotaryMode, PrivacyConfig, ProveConfig,
-    ServerConfig, SessionConfig, SessionMode,
+    ApiProvider, ModelConfig, NetworkSetting, NotaryConfig, NotaryMode, ProveConfig, ServerConfig,
+    SessionConfig, SessionMode,
 };
 use anyhow::Context;
 
 pub(crate) fn gen_cfg(request_limit: usize, response_limit: usize) -> anyhow::Result<ProveConfig> {
+    let domain = "api.proof-of-autonomy.elusaegis.xyz";
+    let provider = ApiProvider::from_domain(domain);
+
     let server_config = ServerConfig::builder()
-        .domain("api.proof-of-autonomy.elusaegis.xyz".to_string())
+        .domain(domain.to_string())
         .port(3000_u16)
         .build()
         .expect("server_config");
@@ -40,7 +43,7 @@ pub(crate) fn gen_cfg(request_limit: usize, response_limit: usize) -> anyhow::Re
         .model(model_config)
         .notary(notary_config)
         .session(session_config)
-        .privacy(PrivacyConfig::default())
+        .privacy(provider.into())
         .build()
         .context("notary_config")
 }

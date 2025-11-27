@@ -122,6 +122,7 @@ dependencies = [
  "derive_builder 0.20.2",
  "dialoguer",
  "dotenvy",
+ "enum_dispatch",
  "futures",
  "hex",
  "http-body-util",
@@ -1422,6 +1423,18 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0c448fc2753338b04aa344ead5a6bdda26f2df2dcd85b65c86dd15b16819369e"
 dependencies = [
  "heck 0.4.1",
+ "proc-macro2",
+ "quote",
+ "syn 2.0.104",
+]
+
+[[package]]
+name = "enum_dispatch"
+version = "0.3.13"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "aa18ce2bc66555b3218614519ac839ddb759a7d6720732f979ef8d13be147ecd"
+dependencies = [
+ "once_cell",
  "proc-macro2",
  "quote",
  "syn 2.0.104",

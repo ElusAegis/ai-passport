@@ -1,4 +1,5 @@
 use crate::config::{ModelConfig, ProveConfig, SessionMode};
+use crate::providers::Provider;
 use crate::utils::io_input::try_read_user_input_from_ctx;
 use crate::utils::spinner::with_spinner_future;
 use anyhow::Context;
@@ -6,9 +7,7 @@ use anyhow::Result;
 use dialoguer::console::style;
 use http_body_util::BodyExt;
 use hyper::client::conn::http1::SendRequest;
-use hyper::header::{
-    ACCEPT_ENCODING, AUTHORIZATION, CONNECTION, CONTENT_LENGTH, CONTENT_TYPE, HOST,
-};
+use hyper::header::{ACCEPT_ENCODING, CONNECTION, CONTENT_TYPE, HOST};
 use hyper::{Method, Request, StatusCode};
 use serde_json::Value;
 use tracing::{debug, info};
@@ -52,8 +51,11 @@ pub(super) async fn single_interaction_round(
     debug!("Request: {:?}", request);
     debug!("Sending request to Model's API...");
 
-    let received_assistant_message: Value =
-        with_spinner_future("processing...", get_response(request_sender, request)).await?;
+    let received_assistant_message: Value = with_spinner_future(
+        "processing...",
+        get_response(request_sender, request, &config.model),
+    )
+    .await?;
 
     let header = style("🤖 Assistant's response:").bold().magenta().dim();
     let content = received_assistant_message
@@ -72,6 +74,7 @@ pub(super) async fn single_interaction_round(
 async fn get_response(
     request_sender: &mut SendRequest<String>,
     request: Request<String>,
+    model_settings: &ModelConfig,
 ) -> Result<Value> {
     let response = request_sender
         .send_request(request)
@@ -99,7 +102,12 @@ async fn get_response(
         serde_json::to_string_pretty(&parsed).context("Error pretty printing the response")?
     );
 
-    let received_assistant_message = serde_json::json!({"role": "assistant", "content": parsed["choices"][0]["message"]["content"]});
+    let provider = model_settings.server.provider();
+    let content = provider
+        .parse_chat_content(&parsed)
+        .context("Failed to parse assistant content from response")?;
+
+    let received_assistant_message = serde_json::json!({"role": "assistant", "content": content});
     Ok(received_assistant_message)
 }
 
@@ -129,21 +137,14 @@ pub(crate) async fn send_connection_close(
 }
 
 pub(crate) fn generate_request(
-    messages: &Vec<Value>,
+    messages: &[Value],
     model_settings: &ModelConfig,
     close_connection: bool,
 ) -> Result<Request<String>> {
-    let messages_val = serde_json::to_value(messages).context("Error serializing messages")?;
+    let provider = model_settings.server.provider();
+    let json_body = provider.build_chat_body(&model_settings.model_id, messages);
 
-    let mut json_body = serde_json::Map::new();
-    json_body.insert(
-        "model".to_string(),
-        serde_json::json!(model_settings.model_id),
-    );
-    json_body.insert("messages".to_string(), messages_val);
-    let json_body = Value::Object(json_body);
-
-    Request::builder()
+    let mut builder = Request::builder()
         .method(Method::POST)
         .uri(model_settings.inference_route.as_str())
         .header(HOST, model_settings.server.domain.as_str())
@@ -156,8 +157,13 @@ pub(crate) fn generate_request(
                 "keep-alive"
             },
         )
-        .header(CONTENT_TYPE, "application/json")
-        .header(AUTHORIZATION, format!("Bearer {}", model_settings.api_key))
+        .header(CONTENT_TYPE, "application/json");
+
+    for (name, value) in provider.chat_headers(&model_settings.api_key) {
+        builder = builder.header(name, value);
+    }
+
+    builder
         .body(json_body.to_string())
         .context("Error building the request")
 }

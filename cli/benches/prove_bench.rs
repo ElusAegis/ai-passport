@@ -1,6 +1,6 @@
 use ai_passport::{
-    run_prove, with_input_source, ModelConfig, NotaryConfig, NotaryMode, PrivacyConfig,
-    ProveConfig, ServerConfig, SessionConfig, SessionMode, VecInputSource,
+    run_prove, with_input_source, ApiProvider, ModelConfig, NotaryConfig, NotaryMode, ProveConfig,
+    ServerConfig, SessionConfig, SessionMode, VecInputSource,
 };
 use criterion::measurement::WallTime;
 use criterion::{
@@ -343,10 +343,12 @@ fn build_prove_config(
         return None;
     }
 
+    let provider = ApiProvider::from_domain(model.api_domain);
+
     Some(
         ProveConfig::builder()
             .model(model_config)
-            .privacy(PrivacyConfig::default())
+            .privacy(provider.into())
             .notary(notary_config)
             .session(session_config)
             .build()
@@ -445,8 +447,8 @@ fn run_cases(
 
                 // First attempt at base size; skip pair if even the base doesn’t fit
                 let cfg = match build_prove_config(
-                    &model,
-                    &notary,
+                    model,
+                    notary,
                     mode,
                     max_req_num,
                     max_request_size,
@@ -460,7 +462,7 @@ fn run_cases(
                     continue;
                 };
 
-                let (max_total_sent, max_total_recv) = cfg.session.max_total_sent_recv();
+                let (_max_total_sent, _max_total_recv) = cfg.session.max_total_sent_recv();
 
                 let bid = format!(
                     "{}+{}-{:?}---{}(#msg)-{}(#max-msg)",

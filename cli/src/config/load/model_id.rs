@@ -1,4 +1,5 @@
 use crate::config::ServerConfig;
+use crate::providers::Provider;
 use crate::utils::spinner::with_spinner_future;
 use anyhow::{Context, Error, Result};
 use dialoguer::console::{style, Term};
@@ -26,13 +27,10 @@ struct ModelList {
 
 /// Fetches the model list from the API and allows the user to select a model interactively.
 /// Falls back to manual entry if fetching fails.
-pub(crate) async fn load_model_id(
-    api_settings: &ServerConfig,
-    model_list_route: &str,
-) -> Result<String> {
+pub(crate) async fn load_model_id(api_settings: &ServerConfig, api_key: &str) -> Result<String> {
     let fetched_model_list = with_spinner_future(
         "Waiting to load model list…",
-        fetch_model_list(api_settings, model_list_route),
+        fetch_model_list(api_settings, api_key),
     )
     .await;
 
@@ -108,16 +106,21 @@ fn prompt_from_list(model_list: Vec<String>, term: &Term) -> Result<String> {
     Ok(model_id)
 }
 
-async fn fetch_model_list(
-    api_settings: &ServerConfig,
-    model_list_route: &str,
-) -> Result<Vec<String>> {
-    let request = hyper::Request::builder()
-        .method(Method::GET)
-        .uri(format!(
-            "https://{}:{}{model_list_route}",
-            api_settings.domain, api_settings.port
-        ))
+async fn fetch_model_list(api_settings: &ServerConfig, api_key: &str) -> Result<Vec<String>> {
+    let provider = api_settings.provider();
+
+    let mut builder = hyper::Request::builder().method(Method::GET).uri(format!(
+        "https://{}:{}{}",
+        api_settings.domain,
+        api_settings.port,
+        provider.models_endpoint()
+    ));
+
+    for (name, value) in provider.models_headers(api_key) {
+        builder = builder.header(name, value);
+    }
+
+    let request = builder
         .body(Empty::<Bytes>::new())
         .context("Failed to build request")?;
 
