@@ -10,8 +10,10 @@ pub use mistral::Mistral;
 pub use redpill::Redpill;
 pub use unknown::Unknown;
 
+use dialoguer::console::style;
 use enum_dispatch::enum_dispatch;
 use serde_json::{json, Value};
+use tracing::info;
 
 #[enum_dispatch]
 pub trait Provider {
@@ -43,9 +45,9 @@ pub trait Provider {
         "/v1/models"
     }
 
-    /// Provider-specific headers for models endpoint (default: none)
-    fn models_headers(&self, _api_key: &str) -> Vec<(&'static str, String)> {
-        vec![]
+    /// Provider-specific headers for models endpoint (default: Bearer token)
+    fn models_headers(&self, api_key: &str) -> Vec<(&'static str, String)> {
+        vec![("Authorization", format!("Bearer {}", api_key))]
     }
 
     /// Request headers to censor for privacy (default: authorization)
@@ -79,6 +81,16 @@ impl ApiProvider {
         } else if domain.contains("red-pill") {
             Redpill.into()
         } else {
+            info!(target: "plain",
+                "{} {} {}",
+                style("⚠").yellow().bold(),
+                style(format!("Unknown provider for domain '{}'", domain)).yellow(),
+                style("· Using OpenAI-compatible defaults").dim()
+            );
+            info!(target: "plain",
+                "{}",
+                style("  If this fails, specify --model-chat-route and --model-list-route manually.").dim()
+            );
             Unknown.into()
         }
     }

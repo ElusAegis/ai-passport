@@ -13,10 +13,6 @@ impl Provider for Fireworks {
         "/inference/v1/models"
     }
 
-    fn models_headers(&self, api_key: &str) -> Vec<(&'static str, String)> {
-        vec![("Authorization", format!("Bearer {}", api_key))]
-    }
-
     fn response_censor_headers(&self) -> &'static [&'static str] {
         &[
             "request-id",

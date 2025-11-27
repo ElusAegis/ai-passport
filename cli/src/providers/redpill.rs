@@ -27,6 +27,10 @@ impl Provider for Redpill {
         })
     }
 
+    fn models_headers(&self, _api_key: &str) -> Vec<(&'static str, String)> {
+        vec![]
+    }
+
     /// Response headers to censor for privacy (default: common tracking headers)
     fn response_censor_headers(&self) -> &'static [&'static str] {
         &["date", "cf-ray", "x-request-id", "set-cookie"]
