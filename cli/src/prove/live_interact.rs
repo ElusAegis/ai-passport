@@ -27,11 +27,6 @@ pub(super) async fn single_interaction_round(
 
     // exit if empty or "exit" (case-insensitive)
     let Some(user_input) = maybe_line.filter(|s| !s.trim().eq_ignore_ascii_case("exit")) else {
-        if matches!(config.session.mode, SessionMode::Single) {
-            send_connection_close(request_sender, &config.model)
-                .await
-                .context("failed to send close request")?;
-        }
         return Ok(true);
     };
 
@@ -109,31 +104,6 @@ async fn get_response(
 
     let received_assistant_message = serde_json::json!({"role": "assistant", "content": content});
     Ok(received_assistant_message)
-}
-
-/// Build and send a minimal empty request that politely asks the server
-/// to close the HTTP/1.1 connection after the response.
-/// We do NOT read the body; we just send and return.
-pub(crate) async fn send_connection_close(
-    request_sender: &mut SendRequest<String>,
-    model_settings: &ModelConfig,
-) -> Result<()> {
-    let req = Request::builder()
-        .method(Method::GET) // or HEAD if your endpoint allows it
-        .uri(model_settings.inference_route.as_str())
-        .header(HOST, model_settings.server.domain.as_str())
-        .header("Accept-Encoding", "identity")
-        .header(CONNECTION, "close")
-        .header(CONTENT_LENGTH, "0")
-        .header(AUTHORIZATION, format!("Bearer {}", model_settings.api_key))
-        .body(String::new())
-        .context("build close request")?;
-
-    // Send the request and discard the response without reading the body.
-    // We await the response head to ensure the request is actually written.
-    let _ = request_sender.send_request(req).await;
-
-    Ok(())
 }
 
 pub(crate) fn generate_request(

@@ -1,5 +1,5 @@
 use crate::config::ProveConfig;
-use crate::prove::live_interact::{send_connection_close, single_interaction_round};
+use crate::prove::live_interact::single_interaction_round;
 use crate::tlsn::notarise::notarise_session;
 use crate::tlsn::save_proof::save_to_file;
 use crate::tlsn::setup::setup;
@@ -21,21 +21,14 @@ pub(crate) async fn run_single(app_config: &ProveConfig) -> anyhow::Result<()> {
 
     let mut messages = vec![];
 
-    let was_stopped = false;
-    for _ in 0..app_config.session.max_msg_num {
+    for i in 0..app_config.session.max_msg_num {
         let was_stopped =
             single_interaction_round(&mut request_sender, app_config, &mut messages).await?;
 
-        if was_stopped {
+        if was_stopped || i + 1 >= app_config.session.max_msg_num {
+            drop(request_sender);
             break;
         }
-    }
-
-    if !was_stopped {
-        // If the interaction was not stopped, send a connection close request
-        send_connection_close(&mut request_sender, &app_config.model)
-            .await
-            .context("failed to send close request")?;
     }
 
     // Notarize the session
