@@ -1,7 +1,7 @@
 use crate::config::{ModelConfig, ProveConfig, SessionMode};
 use crate::providers::Provider;
-use crate::utils::io_input::try_read_user_input_from_ctx;
-use crate::utils::spinner::with_spinner_future;
+use crate::ui::io_input::try_read_user_input_from_ctx;
+use crate::ui::spinner::with_spinner_future;
 use anyhow::Context;
 use anyhow::Result;
 use dialoguer::console::style;

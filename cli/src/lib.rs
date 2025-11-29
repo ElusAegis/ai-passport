@@ -4,7 +4,7 @@ mod config;
 mod prove;
 mod providers;
 mod tlsn;
-mod utils;
+mod ui;
 mod verify;
 
 pub use app::Application;
@@ -17,4 +17,4 @@ pub use prove::run_prove;
 pub use providers::ApiProvider;
 pub use tlsn::{notarise, save_proof, setup};
 pub use tlsn_common::config::NetworkSetting;
-pub use utils::io_input::{with_input_source, InputSource, StdinInputSource, VecInputSource};
+pub use ui::io_input::{with_input_source, InputSource, StdinInputSource, VecInputSource};

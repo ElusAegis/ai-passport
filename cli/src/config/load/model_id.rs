@@ -1,6 +1,6 @@
 use crate::config::ServerConfig;
 use crate::providers::Provider;
-use crate::utils::spinner::with_spinner_future;
+use crate::ui::spinner::with_spinner_future;
 use anyhow::{Context, Error, Result};
 use dialoguer::console::{style, Term};
 use dialoguer::theme::ColorfulTheme;

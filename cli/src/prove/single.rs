@@ -3,7 +3,7 @@ use crate::prove::live_interact::single_interaction_round;
 use crate::tlsn::notarise::notarise_session;
 use crate::tlsn::save_proof::save_to_file;
 use crate::tlsn::setup::setup;
-use crate::utils::spinner::with_spinner_future;
+use crate::ui::spinner::with_spinner_future;
 use anyhow::Context;
 use dialoguer::console::style;
 use tracing::{debug, info};
