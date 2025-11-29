@@ -27,7 +27,7 @@ impl Provider for Redpill {
         })
     }
 
-    fn models_headers(&self, _api_key: &str) -> Vec<(&'static str, String)> {
+    fn models_headers_with_key(&self, _api_key: &str) -> Vec<(&'static str, String)> {
         vec![]
     }
 

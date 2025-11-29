@@ -14,7 +14,7 @@ impl Provider for Anthropic {
         "/v1/messages"
     }
 
-    fn chat_headers(&self, api_key: &str) -> Vec<(&'static str, String)> {
+    fn chat_headers_with_key(&self, api_key: &str) -> Vec<(&'static str, String)> {
         vec![
             ("x-api-key", api_key.to_string()),
             ("anthropic-version", Self::API_VERSION.to_string()),
@@ -34,7 +34,7 @@ impl Provider for Anthropic {
         response["content"][0]["text"].as_str()
     }
 
-    fn models_headers(&self, api_key: &str) -> Vec<(&'static str, String)> {
+    fn models_headers_with_key(&self, api_key: &str) -> Vec<(&'static str, String)> {
         vec![
             ("x-api-key", api_key.to_string()),
             ("anthropic-version", Self::API_VERSION.to_string()),

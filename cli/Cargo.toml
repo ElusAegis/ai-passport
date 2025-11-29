@@ -53,6 +53,8 @@ anyhow = { workspace = true }
 derive_builder = { workspace = true }
 enum_dispatch = "0.3"
 hex = { workspace = true }
+async-trait = "0.1.89"
+ambassador = "0.4.2"
 
 [dev-dependencies]
 criterion = { workspace = true }

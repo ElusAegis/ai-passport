@@ -1,4 +1,4 @@
-use crate::config::privacy::PrivacyConfig;
+use crate::providers::Provider;
 use anyhow::{Context, Result};
 use std::collections::HashSet;
 use std::fs;
@@ -11,15 +11,15 @@ use tlsn_formats::http::HttpTranscript;
 
 const PROOFS_DIR: &str = "proofs";
 
-pub fn save_to_file(
+pub fn save_to_file<P: Provider>(
     name: &str,
     attestation: &Attestation,
-    privacy_config: &PrivacyConfig,
+    provider: &P,
     secrets: &Secrets,
 ) -> Result<PathBuf> {
     // 1) Build transcript proof with selective disclosure
     let transcript_proof =
-        build_transcript_proof(secrets, privacy_config).context("building transcript proof")?;
+        build_transcript_proof(secrets, provider).context("building transcript proof")?;
 
     // 2) Build the final presentation (identity + transcript proofs)
     let presentation = build_presentation(attestation, secrets, transcript_proof)
@@ -39,18 +39,18 @@ pub fn save_to_file(
 
 // --- helpers ---
 
-fn build_transcript_proof(secrets: &Secrets, privacy: &PrivacyConfig) -> Result<TranscriptProof> {
+fn build_transcript_proof<P: Provider>(secrets: &Secrets, provider: &P) -> Result<TranscriptProof> {
     let transcript =
         HttpTranscript::parse(secrets.transcript()).context("parsing HTTP transcript")?;
 
     // Precompute lowercased header names to censor
-    let req_censor: HashSet<String> = privacy
-        .request_topics_to_censor
+    let req_censor: HashSet<String> = provider
+        .request_censor_headers()
         .iter()
         .map(|s| s.to_lowercase())
         .collect();
-    let resp_censor: HashSet<String> = privacy
-        .response_topics_to_censor
+    let resp_censor: HashSet<String> = provider
+        .response_censor_headers()
         .iter()
         .map(|s| s.to_lowercase())
         .collect();

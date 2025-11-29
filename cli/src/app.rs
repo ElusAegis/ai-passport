@@ -1,39 +1,29 @@
-use crate::args::{Cli, Command};
-use crate::config::{ProveConfig, VerifyConfig};
-use crate::prove::run_prove;
+use crate::cli::{Cli, Command};
+use crate::config::prove::ProveConfig;
+use crate::config::verify::VerifyConfig;
+use crate::prover::AgentProver;
+use crate::prover::Prover;
 use crate::verify::run_verify;
-use crate::with_input_source;
-use crate::StdinInputSource;
+use crate::{with_input_source, StdinInputSource};
 use clap::Parser;
 
-pub enum Application {
-    Prove(Box<ProveConfig>),
-    Verify(VerifyConfig),
-}
+/// Run the application from CLI arguments
+pub async fn run() -> anyhow::Result<()> {
+    // Preload environment variables from .env file if it exists before parsing CLI args
+    dotenvy::dotenv().ok();
 
-impl Application {
-    pub async fn init() -> anyhow::Result<Application> {
-        // Preload environment variables from .env file if it exists before parsing CLI args
-        dotenvy::dotenv().ok();
+    let cli = Cli::parse();
 
-        let cli = Cli::parse();
+    match cli.cmd {
+        Command::Prove(prove_args) => {
+            let config = ProveConfig::from_args(&prove_args).await?;
+            let prover = AgentProver::try_from(prove_args)?;
 
-        let application = match cli.cmd {
-            Command::Prove(prove_args) => {
-                Application::Prove(Box::new(ProveConfig::setup(prove_args).await?))
-            }
-            Command::Verify(verify_args) => Application::Verify(VerifyConfig::setup(verify_args)?),
-        };
-
-        Ok(application)
-    }
-
-    pub async fn run(&self) -> anyhow::Result<()> {
-        match self {
-            Self::Prove(prove_conf) => {
-                with_input_source(StdinInputSource {}, async { run_prove(prove_conf).await }).await
-            }
-            Self::Verify(verify_conf) => run_verify(verify_conf),
+            with_input_source(StdinInputSource {}, prover.run(&config)).await
+        }
+        Command::Verify(verify_args) => {
+            let config = VerifyConfig::setup(verify_args)?;
+            run_verify(&config)
         }
     }
 }

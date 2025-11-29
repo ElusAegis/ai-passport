@@ -1,4 +1,3 @@
-use ai_passport::Application;
 use anyhow::{Context, Result};
 use dialoguer::console::style;
 use tracing::info;
@@ -14,9 +13,7 @@ async fn main() -> Result<()> {
 
     print_welcome();
 
-    let application = Application::init().await?;
-
-    application.run().await
+    ai_passport::run().await
 }
 
 fn init_logging() -> anyhow::Result<()> {

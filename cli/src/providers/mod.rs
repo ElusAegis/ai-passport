@@ -1,10 +1,13 @@
 mod anthropic;
 mod fireworks;
+pub mod interaction;
 mod mistral;
 mod redpill;
 mod unknown;
 
+use ambassador::{delegatable_trait, Delegate};
 pub use anthropic::Anthropic;
+use derive_builder::Builder;
 pub use fireworks::Fireworks;
 pub use mistral::Mistral;
 pub use redpill::Redpill;
@@ -15,6 +18,7 @@ use enum_dispatch::enum_dispatch;
 use serde_json::{json, Value};
 use tracing::info;
 
+#[delegatable_trait]
 #[enum_dispatch]
 pub trait Provider {
     /// Endpoint path for chat/message completions (default: OpenAI-style)
@@ -23,7 +27,7 @@ pub trait Provider {
     }
 
     /// Provider-specific headers for chat/messages endpoint (default: Bearer token)
-    fn chat_headers(&self, api_key: &str) -> Vec<(&'static str, String)> {
+    fn chat_headers_with_key(&self, api_key: &str) -> Vec<(&'static str, String)> {
         vec![("Authorization", format!("Bearer {}", api_key))]
     }
 
@@ -46,7 +50,7 @@ pub trait Provider {
     }
 
     /// Provider-specific headers for models endpoint (default: Bearer token)
-    fn models_headers(&self, api_key: &str) -> Vec<(&'static str, String)> {
+    fn models_headers_with_key(&self, api_key: &str) -> Vec<(&'static str, String)> {
         vec![("Authorization", format!("Bearer {}", api_key))]
     }
 
@@ -59,9 +63,52 @@ pub trait Provider {
     fn response_censor_headers(&self) -> &'static [&'static str];
 }
 
+#[derive(Debug, Clone, Builder, Delegate)]
+#[delegate(Provider, target = "provider")]
+pub struct ApiProvider {
+    /// The domain of the provider hosting the model API
+    /// Also used to auto-detect the provider.
+    #[builder(setter(custom))]
+    pub(crate) domain: String,
+    /// The port of the provider hosting the model API
+    #[builder(setter(into), default = "443")]
+    pub(crate) port: u16,
+    /// The provider of the model API (auto-derived from domain)
+    /// Use `ApiProviderBuilder::domain` to set this field automatically.
+    #[builder(setter(custom))]
+    provider: ApiProviderInner,
+    /// The API key for authentication with the model API
+    #[builder(setter(into))]
+    pub(crate) api_key: String,
+}
+
+impl ApiProvider {
+    pub fn builder() -> ApiProviderBuilder {
+        ApiProviderBuilder::default()
+    }
+
+    pub fn chat_headers(&self) -> Vec<(&'static str, String)> {
+        self.chat_headers_with_key(&self.api_key)
+    }
+
+    pub fn models_headers(&self) -> Vec<(&'static str, String)> {
+        self.models_headers_with_key(&self.api_key)
+    }
+}
+
+impl ApiProviderBuilder {
+    pub fn domain(mut self, domain: impl Into<String>) -> Self {
+        let domain_str = domain.into();
+        let provider = ApiProviderInner::from_domain(&domain_str);
+        self.domain = Some(domain_str);
+        self.provider = Some(provider);
+        self
+    }
+}
+
 #[enum_dispatch(Provider)]
 #[derive(Debug, Clone)]
-pub enum ApiProvider {
+enum ApiProviderInner {
     Unknown,
     Anthropic,
     Fireworks,
@@ -69,9 +116,9 @@ pub enum ApiProvider {
     Redpill,
 }
 
-impl ApiProvider {
+impl ApiProviderInner {
     /// Detect the appropriate provider based on domain
-    pub fn from_domain(domain: &str) -> Self {
+    fn from_domain(domain: &str) -> Self {
         if domain.contains("anthropic") {
             Anthropic.into()
         } else if domain.contains("fireworks") {

@@ -8,7 +8,7 @@ use crate::portfolio::price_feed::context::build_portfolio_context;
 use crate::portfolio::price_feed::enrich::with_prices;
 use crate::utils::logging::init_logging;
 use crate::utils::notary_config::gen_cfg;
-use ai_passport::{run_prove, with_input_source, VecInputSource};
+use ai_passport::{with_input_source, VecInputSource};
 
 mod decision;
 mod polymarket;

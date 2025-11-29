@@ -1,6 +1,6 @@
-use crate::config::ServerConfig;
 use crate::providers::Provider;
 use crate::ui::spinner::with_spinner_future;
+use crate::ApiProvider;
 use anyhow::{Context, Error, Result};
 use dialoguer::console::{style, Term};
 use dialoguer::theme::ColorfulTheme;
@@ -26,15 +26,11 @@ struct ModelList {
 }
 
 /// Fetches the model list from the API and allows the user to select a model interactively.
-/// Falls back to manual entry if fetching fails.
-pub(crate) async fn load_model_id(
-    api_settings: &ServerConfig,
-    api_key: &str,
-    model_list_route: Option<&str>,
-) -> Result<String> {
+/// Fa pub(crate)lls back to manual entry if fetching fails.
+pub(crate) async fn load_model_id(api_provider: &ApiProvider) -> Result<String> {
     let fetched_model_list = with_spinner_future(
         "Waiting to load model list…",
-        fetch_model_list(api_settings, api_key, model_list_route),
+        fetch_model_list(api_provider),
     )
     .await;
 
@@ -110,20 +106,16 @@ fn prompt_from_list(model_list: Vec<String>, term: &Term) -> Result<String> {
     Ok(model_id)
 }
 
-async fn fetch_model_list(
-    api_settings: &ServerConfig,
-    api_key: &str,
-    model_list_route: Option<&str>,
-) -> Result<Vec<String>> {
-    let provider = api_settings.provider();
-    let endpoint = model_list_route.unwrap_or_else(|| provider.models_endpoint());
+async fn fetch_model_list(provider: &ApiProvider) -> Result<Vec<String>> {
+    let api_domain = &provider.domain;
+    let api_port = provider.port;
+    let models_endpoint = provider.models_endpoint();
 
-    let mut builder = hyper::Request::builder().method(Method::GET).uri(format!(
-        "https://{}:{}{}",
-        api_settings.domain, api_settings.port, endpoint
-    ));
+    let mut builder = hyper::Request::builder()
+        .method(Method::GET)
+        .uri(format!("https://{api_domain}:{api_port}{models_endpoint}"));
 
-    for (name, value) in provider.models_headers(api_key) {
+    for (name, value) in provider.models_headers() {
         builder = builder.header(name, value);
     }
 
