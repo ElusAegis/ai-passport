@@ -10,6 +10,7 @@
 use super::Prover;
 use crate::config::notary::NotaryConfig;
 use crate::config::ProveConfig;
+use crate::providers::budget::{ByteBudget, ObservedOverhead};
 use crate::providers::interaction::single_interaction_round;
 use crate::tlsn::notarise::notarise_session;
 use crate::tlsn::save_proof::save_to_file;
@@ -20,6 +21,7 @@ use async_trait::async_trait;
 use hyper::client::conn::http1::SendRequest;
 use serde_json::Value;
 use std::path::PathBuf;
+use std::sync::{Arc, Mutex};
 use tlsn_prover::{state, Prover as TlsnProver, ProverError};
 use tokio::task::JoinHandle;
 use tracing::debug;
@@ -65,15 +67,27 @@ impl Prover for TlsPerMessageProver {
         let mut future_instance_handle: Option<JoinHandle<Result<ProverWithRequestSender>>> =
             Some(spawn_setup(self.notary.clone()));
 
+        // Create shared overhead state
+        // This overhead is learned from first message and reused for budget estimates
+        let shared_overhead = Arc::new(Mutex::new(ObservedOverhead::default()));
+
         let mut counter = 0;
         loop {
             // Wait for the current instance to be ready
             let mut current_instance = current_instance_handle.await??;
 
+            let mut budget =
+                ByteBudget::from_notary_with_shared_overhead(&self.notary, shared_overhead.clone());
+
             // Per-message uses close connection (close_connection = true)
-            let stop =
-                single_interaction_round(&mut current_instance.1, config, &mut all_messages, true)
-                    .await?;
+            let stop = single_interaction_round(
+                &mut current_instance.1,
+                config,
+                &mut all_messages,
+                true,
+                &mut budget,
+            )
+            .await?;
 
             if stop {
                 break;

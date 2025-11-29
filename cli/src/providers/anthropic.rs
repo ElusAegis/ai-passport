@@ -6,7 +6,6 @@ pub struct Anthropic;
 
 impl Anthropic {
     const API_VERSION: &'static str = "2023-06-01";
-    const MAX_TOKENS: u32 = 1024;
 }
 
 impl Provider for Anthropic {
@@ -21,10 +20,19 @@ impl Provider for Anthropic {
         ]
     }
 
-    fn build_chat_body(&self, model_id: &str, messages: &[Value]) -> Value {
+    fn build_chat_body(&self, _model_id: &str, _messages: &[Value]) -> Value {
+        unimplemented!("Use build_chat_body_with_limit instead for Anthropic provider")
+    }
+
+    fn build_chat_body_with_limit(
+        &self,
+        model_id: &str,
+        messages: &[Value],
+        max_tokens: Option<u32>,
+    ) -> Value {
         json!({
             "model": model_id,
-            "max_tokens": Self::MAX_TOKENS,
+            "max_tokens": max_tokens.unwrap_or(1024),
             "messages": messages,
             "stream": false,
         })

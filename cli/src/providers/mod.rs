@@ -1,4 +1,5 @@
 mod anthropic;
+pub mod budget;
 mod fireworks;
 pub mod interaction;
 mod mistral;
@@ -37,6 +38,25 @@ pub trait Provider {
             "model": model_id,
             "messages": messages
         })
+    }
+
+    /// Build the request body with an optional max_tokens limit.
+    ///
+    /// Default implementation calls `build_chat_body` and merges `max_tokens` if provided.
+    /// Providers can override for custom behavior.
+    fn build_chat_body_with_limit(
+        &self,
+        model_id: &str,
+        messages: &[Value],
+        max_tokens: Option<u32>,
+    ) -> Value {
+        let mut body = self.build_chat_body(model_id, messages);
+        if let Some(tokens) = max_tokens {
+            if let Some(obj) = body.as_object_mut() {
+                obj.insert("max_tokens".to_string(), json!(tokens));
+            }
+        }
+        body
     }
 
     /// Parse the assistant's content from the response (default: OpenAI-style)

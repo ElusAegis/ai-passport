@@ -12,6 +12,7 @@ pub use config::notary::{NotaryConfig, NotaryMode};
 pub use prover::{
     AgentProver, DirectProver, Prover, ProverKind, TlsPerMessageProver, TlsSingleShotProver,
 };
+pub use providers::budget::ByteBudget;
 pub use providers::ApiProvider;
 pub use tlsn::{notarise, save_proof, setup};
 pub use tlsn_common::config::NetworkSetting;
