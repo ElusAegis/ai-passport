@@ -21,16 +21,12 @@ pub(super) async fn single_interaction_round(
     messages: &mut Vec<Value>,
 ) -> Result<bool> {
     // ---- 1) Read user input -------------------------------------------------
-    // Prefer using context; fall back to stdin if absent.
-    let maybe_line: Option<String> =
-        try_read_user_input_from_ctx().context("failed to read user input")??;
-
-    // exit if empty or "exit" (case-insensitive)
-    let Some(user_input) = maybe_line.filter(|s| !s.trim().eq_ignore_ascii_case("exit")) else {
+    let Some(user_input) = try_read_user_input_from_ctx().context("failed to read user input")?
+    else {
         return Ok(true);
     };
 
-    // ---- 3) Normal request path ---------------------------------------------
+    // ---- 2) Normal request path ---------------------------------------------
     messages.push(serde_json::json!({
         "role": "user",
         "content": user_input

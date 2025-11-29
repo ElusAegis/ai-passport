@@ -2,7 +2,6 @@ pub trait InputSource: Send + 'static {
     fn next(&mut self) -> anyhow::Result<Option<String>>;
 }
 
-// 2) Task-local holder
 use anyhow::Context;
 use dialoguer::console::{style, Term};
 use std::io::stdin;
@@ -23,14 +22,14 @@ where
     INPUT_CTX.scope(arc, fut).await
 }
 
-// 4) Anywhere deep in your code:
-pub(crate) fn try_read_user_input_from_ctx() -> Option<anyhow::Result<Option<String>>> {
+pub(crate) fn try_read_user_input_from_ctx() -> anyhow::Result<Option<String>> {
     INPUT_CTX
         .try_with(|arc| {
             let mut guard = arc.lock().unwrap();
             guard.next()
         })
-        .ok()
+        .map_err(|_| anyhow::anyhow!("No input source in context"))
+        .flatten()
 }
 
 pub struct StdinInputSource;
