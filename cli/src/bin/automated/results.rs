@@ -7,7 +7,7 @@ use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use std::fs::{self, OpenOptions};
 use std::io::Write;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use tracing::info;
 
 /// Benchmark-specific configuration (fields not derivable from ProveConfig/AgentProver).
@@ -77,7 +77,7 @@ pub struct BenchmarkRecord {
 impl BenchmarkRecord {
     /// Create a successful benchmark record from stats.
     pub fn from_stats(
-        benchmark_config: BenchmarkConfig,
+        benchmark_config: &BenchmarkConfig,
         prove_config: &ProveConfig,
         prover: AgentProver,
         stats: &BenchmarkStats,
@@ -108,7 +108,7 @@ impl BenchmarkRecord {
             timestamp: Utc::now(),
             provider_name: prove_config.provider.provider_name().to_string(),
             model_id: prove_config.model_id.clone(),
-            benchmark: benchmark_config,
+            benchmark: benchmark_config.clone(),
             prover,
             results: BenchmarkResults {
                 completed_rounds: stats.completed_rounds(),
@@ -123,7 +123,7 @@ impl BenchmarkRecord {
 
     /// Create a failed benchmark record.
     pub fn failed(
-        benchmark_config: BenchmarkConfig,
+        benchmark_config: &BenchmarkConfig,
         prove_config: &ProveConfig,
         prover: AgentProver,
         stats: &BenchmarkStats,
@@ -153,10 +153,7 @@ pub fn generate_filename(record: &BenchmarkRecord) -> String {
     let resp_bytes = record.benchmark.target_response_bytes;
     let failed_suffix = if record.success { "" } else { "_failed" };
 
-    format!(
-        "{}_{}_{}_{}_{}{}.jsonl",
-        provider, model, messages, req_bytes, resp_bytes, failed_suffix
-    )
+    format!("{provider}_{model}_{messages}_{req_bytes}_{resp_bytes}{failed_suffix}.jsonl",)
 }
 
 /// Get the benchmarks directory, creating it if necessary.
@@ -187,35 +184,4 @@ pub fn save_record(record: &BenchmarkRecord) -> Result<PathBuf> {
 
     info!("Benchmark results saved to: {}", path.display());
     Ok(path)
-}
-
-/// Load all records from a JSONL file.
-#[allow(dead_code)]
-pub fn load_records(path: &Path) -> Result<Vec<BenchmarkRecord>> {
-    let content = fs::read_to_string(path)
-        .with_context(|| format!("Failed to read benchmark file: {}", path.display()))?;
-
-    content
-        .lines()
-        .filter(|line| !line.trim().is_empty())
-        .map(|line| {
-            serde_json::from_str(line)
-                .with_context(|| format!("Failed to parse benchmark record: {}", line))
-        })
-        .collect()
-}
-
-/// List all benchmark JSONL files in the benchmarks directory.
-#[allow(dead_code)]
-pub fn list_benchmark_files() -> Result<Vec<PathBuf>> {
-    let dir = benchmarks_dir()?;
-
-    let files: Vec<PathBuf> = fs::read_dir(&dir)
-        .context("Failed to read benchmarks directory")?
-        .filter_map(|entry| entry.ok())
-        .map(|entry| entry.path())
-        .filter(|path| path.extension().map(|ext| ext == "jsonl").unwrap_or(false))
-        .collect();
-
-    Ok(files)
 }

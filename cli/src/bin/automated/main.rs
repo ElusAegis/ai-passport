@@ -21,16 +21,18 @@
 //! with a `_failed` suffix.
 
 mod input_source;
+mod presets;
 mod results;
 mod runner;
 mod stats;
 
-use ai_passport::{AgentProver, ApiProvider, DirectProver, ProveConfig, BYTES_PER_TOKEN};
+use ai_passport::{ApiProvider, ProveConfig, BYTES_PER_TOKEN};
 use anyhow::Context;
 use dotenvy::var;
+use presets::{all_notary_presets, all_prover_presets};
 use results::BenchmarkConfig;
 use runner::run_benchmark;
-use tracing::info;
+use tracing::{error, info};
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
@@ -74,30 +76,85 @@ async fn main() -> anyhow::Result<()> {
             .unwrap_or_else(|| "unlimited".to_string())
     );
 
-    // Build the benchmark config (only benchmark-specific fields)
+    // Build the API provider (shared across all provers)
+    let api_provider = ApiProvider::builder()
+        .domain(&domain)
+        .port(port)
+        .api_key(&api_key)
+        .build()
+        .context("Failed to build ApiProvider")?;
+
+    // Get all presets
+    let prover_presets = all_prover_presets();
+    let notary_presets = all_notary_presets();
+
+    info!(
+        "Running {} prover(s) x {} notary preset(s)",
+        prover_presets.len(),
+        notary_presets.len()
+    );
+
+    let prove_config = ProveConfig::builder()
+        .provider(api_provider.clone())
+        .model_id(&model_id)
+        .max_response_tokens(target_response_bytes / BYTES_PER_TOKEN as u32)
+        .build()
+        .context("Failed to build ProveConfig")?;
+
     let benchmark_config = BenchmarkConfig {
         target_request_bytes,
         target_response_bytes,
         max_rounds,
     };
 
-    let api_provider = ApiProvider::builder()
-        .domain(domain)
-        .port(port)
-        .api_key(api_key)
-        .build()
-        .context("Failed to build ApiProvider")?;
+    // Track results
+    let mut success_count = 0;
+    let mut failure_count = 0;
 
-    let prove_config = ProveConfig::builder()
-        .provider(api_provider)
-        .model_id(model_id)
-        .max_response_tokens(target_response_bytes / BYTES_PER_TOKEN as u32)
-        .build()
-        .context("Failed to build ProveConfig")?;
+    // Iterate over all prover presets
+    for prover_preset in prover_presets {
+        // Run with each notary preset (if not required, only run first)
+        for notary_preset in &notary_presets {
+            info!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+            info!(
+                "Running: {} ({})",
+                prover_preset.name,
+                if prover_preset.requires_notary() {
+                    notary_preset.name
+                } else {
+                    "no notary"
+                }
+            );
 
-    let prover = AgentProver::Direct(DirectProver {});
+            let prover = prover_preset.build(notary_preset);
 
-    run_benchmark(benchmark_config, prove_config, prover).await?;
+            match run_benchmark(&benchmark_config, &prove_config, prover).await {
+                Ok(path) => {
+                    info!("Completed: {}", path.display());
+                    success_count += 1;
+                }
+                Err(e) => {
+                    error!(
+                        "Failed {} + {}: {}",
+                        prover_preset.name, notary_preset.name, e
+                    );
+                    failure_count += 1;
+                }
+            }
+
+            if !prover_preset.requires_notary() {
+                // If the prover does not require a notary, skip further notary presets
+                break;
+            }
+        }
+    }
+
+    info!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+    info!("Benchmark run complete: {success_count} succeeded, {failure_count} failed",);
+
+    if failure_count > 0 {
+        anyhow::bail!("{failure_count} benchmark(s) failed");
+    }
 
     Ok(())
 }

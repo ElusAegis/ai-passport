@@ -187,15 +187,19 @@ impl InputSource for BenchmarkInputSource {
         if let Some(last) = past_messages.last() {
             let response_size = last.content().len();
             self.stats.complete_round(response_size);
-            debug!(
-                "Round {} complete. Assistant response: {} bytes",
-                self.round, response_size
-            );
+
+            // Print timing for the completed round
+            let round_durations = self.stats.round_durations_ms();
+            if let Some(&duration_ms) = round_durations.last() {
+                info!(
+                    "Round {}: {}ms (response: {} bytes)",
+                    self.round, duration_ms, response_size
+                );
+            }
         }
 
         // Check if we should continue
         if !self.should_continue(budget, past_messages) {
-            info!("Benchmark complete after {} rounds", self.round);
             return Ok(None);
         }
 
@@ -206,12 +210,12 @@ impl InputSource for BenchmarkInputSource {
         // Start timing for this round
         self.stats.start_round(message_len);
 
-        info!(
-            "Round {}: Generating message of {} bytes, requesting ~{} response bytes",
-            self.round + 1,
-            message_len,
-            self.target_response_bytes
-        );
+        // Print setup time before the first round
+        if self.round == 0 {
+            if let Some(setup) = self.stats.setup_duration() {
+                info!("Setup: {}ms", setup.as_millis());
+            }
+        }
 
         self.round += 1;
 

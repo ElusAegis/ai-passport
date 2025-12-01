@@ -13,8 +13,8 @@ use std::sync::{Arc, Mutex};
 ///
 /// Returns the path to the saved results file.
 pub async fn run_benchmark(
-    benchmark_config: BenchmarkConfig,
-    prove_config: ProveConfig,
+    benchmark_config: &BenchmarkConfig,
+    prove_config: &ProveConfig,
     prover: AgentProver,
 ) -> Result<PathBuf> {
     let target_request_bytes = benchmark_config.target_request_bytes;
@@ -77,7 +77,7 @@ impl InputSource for InputSourceWrapper {
         budget: &ChannelBudget,
         config: &ProveConfig,
         past_messages: &[ChatMessage],
-    ) -> anyhow::Result<Option<ChatMessage>> {
+    ) -> Result<Option<ChatMessage>> {
         self.0
             .lock()
             .unwrap()
