@@ -3,7 +3,7 @@
 //! This module provides types to track and enforce byte limits on send/receive
 //! channels, primarily for TLS-notarized sessions where channel capacity is limited.
 
-use crate::NotaryConfig;
+use crate::{ChatMessage, NotaryConfig};
 use anyhow::{bail, Result};
 use hyper::body::Bytes;
 use hyper::Request;
@@ -42,24 +42,17 @@ impl ObservedOverhead {
         self.response.unwrap_or(RESPONSE_OVERHEAD_ESTIMATE)
     }
 
-    /// Update request overhead from observed values.
-    /// Warns if updating after initial observation (should be constant).
+    /// Update request overhead based on the first observed values.
+    /// As we generate requests ourselves, the overhead is constant after the first observation.
     fn update_request(&mut self, total_bytes: usize, content_bytes: usize) {
         let overhead = total_bytes.saturating_sub(content_bytes);
-        if let Some(prev) = self.request {
-            if prev != overhead {
-                warn!(
-                    "request overhead changed unexpectedly: {} -> {} (expected constant)",
-                    prev, overhead
-                );
-            }
-        } else {
+        if self.request.is_none() {
             debug!(
                 "overhead: observed request overhead = {} (total={}, content={})",
                 overhead, total_bytes, content_bytes
             );
+            self.request = Some(overhead);
         }
-        self.request = Some(overhead);
     }
 
     /// Update response overhead from observed values.
@@ -196,7 +189,7 @@ impl ChannelBudget {
         }
 
         debug!(
-            "sent ↑: total={} content={} (ratio={:.1}x)",
+            "data ↑: total={} content={} (ratio={:.1}x)",
             total_bytes,
             content_bytes,
             total_bytes as f64 / content_bytes.max(1) as f64
@@ -216,7 +209,7 @@ impl ChannelBudget {
         }
 
         debug!(
-            "received ↓: total={} content={} (ratio={:.1}x)",
+            "data ↓: total={} content={} (ratio={:.1}x)",
             total_bytes,
             content_bytes,
             total_bytes as f64 / content_bytes.max(1) as f64
@@ -247,13 +240,20 @@ impl ChannelBudget {
     /// Uses observed request overhead if available, otherwise falls back to estimate.
     /// Returns `None` for unlimited budgets.
     /// Returns `Some(bytes)` showing how many bytes the user can still send.
-    pub fn available_input_bytes(&self) -> Option<usize> {
+    pub fn available_input_bytes(&self, past_messages: &[ChatMessage]) -> Option<usize> {
         match self.capacity {
             ChannelCapacity::Unlimited => None,
             ChannelCapacity::Limited { sent_capacity, .. } => {
+                let repeated_content_bytes: usize =
+                    serde_json::json!(past_messages).to_string().len();
+
                 let request_overhead = self.overhead.request_overhead();
                 let sent_remaining = sent_capacity.saturating_sub(self.sent);
-                Some(sent_remaining.saturating_sub(request_overhead))
+                let new_message_remaining = sent_remaining
+                    .saturating_sub(repeated_content_bytes)
+                    .saturating_sub(request_overhead);
+
+                Some(new_message_remaining)
             }
         }
     }
@@ -351,7 +351,7 @@ mod tests {
         let request_size = ChannelBudget::calculate_request_size(&request);
         assert!(budget.check_request_fits(request_size).is_ok());
         assert!(budget.max_tokens_for_response().is_none());
-        assert!(budget.available_input_bytes().is_none());
+        assert!(budget.available_input_bytes(&[]).is_none());
     }
 
     #[test]
@@ -396,7 +396,7 @@ mod tests {
     fn test_available_input_bytes() {
         let budget = make_limited_budget(1000, 2000);
 
-        let available = budget.available_input_bytes().unwrap();
+        let available = budget.available_input_bytes(&[]).unwrap();
         // sent_capacity=1000, sent=0, overhead_estimate=285
         // available = 1000 - 285 = 715
         assert_eq!(available, 715);
@@ -417,7 +417,7 @@ mod tests {
 
         // Initially uses estimates
         // available_input = 1000 - 285 (estimate) = 715
-        assert_eq!(budget.available_input_bytes().unwrap(), 715);
+        assert_eq!(budget.available_input_bytes(&[]).unwrap(), 715);
         // max_tokens = (10000 - 5000) / 5 = 1000
         assert_eq!(budget.max_tokens_for_response().unwrap(), 1000);
 
@@ -428,7 +428,7 @@ mod tests {
         // Now uses observed values (and remaining is reduced)
         // sent_remaining = 1000 - 300 = 700
         // available_input = 700 - 200 (observed) = 500
-        assert_eq!(budget.available_input_bytes().unwrap(), 500);
+        assert_eq!(budget.available_input_bytes(&[]).unwrap(), 500);
 
         // recv_remaining = 10000 - 400 = 9600
         // max_tokens = (9600 - 200) / 5 = 1880
@@ -451,7 +451,7 @@ mod tests {
 
         // Overhead should still be observed values
         // available_input = 1000 - 200 (observed) = 800
-        assert_eq!(budget.available_input_bytes().unwrap(), 800);
+        assert_eq!(budget.available_input_bytes(&[]).unwrap(), 800);
     }
 
     /// Build the expected HTTP/1.1 wire format string for a request.

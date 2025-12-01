@@ -109,7 +109,7 @@ impl InputSource for StdinInputSource {
 
         // Build prompt with optional budget info and exhaustion warning
         let (budget_suffix, exhaustion_warning) = match (
-            budget.available_input_bytes(),
+            budget.available_input_bytes(past_messages),
             budget.available_recv_bytes(),
         ) {
             (Some(send), Some(recv)) => {
