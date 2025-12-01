@@ -1,13 +1,7 @@
-//! Automated benchmark binary for testing provers with consistent message sizes.
-//!
-//! This binary generates messages of fixed sizes to enable reproducible benchmarking
-//! across different provers and model providers.
+//! Benchmark input source implementation.
 
-use ai_passport::{
-    with_input_source, AgentProver, ApiProvider, ChannelBudget, ChatMessage, DirectProver,
-    InputSource, ProveConfig, Prover, BYTES_PER_TOKEN,
-};
-use anyhow::Context;
+use super::stats::BenchmarkStats;
+use ai_passport::{ChannelBudget, ChatMessage, InputSource, ProveConfig, BYTES_PER_TOKEN};
 use tracing::{debug, info, warn};
 
 /// Input source for benchmarking with fixed message sizes.
@@ -23,6 +17,8 @@ pub struct BenchmarkInputSource {
     max_rounds: Option<usize>,
     /// Current round counter.
     round: usize,
+    /// Statistics collector.
+    stats: BenchmarkStats,
 }
 
 impl BenchmarkInputSource {
@@ -42,7 +38,18 @@ impl BenchmarkInputSource {
             target_response_bytes,
             max_rounds,
             round: 0,
+            stats: BenchmarkStats::new(),
         }
+    }
+
+    /// Get the collected statistics.
+    pub fn stats(&self) -> &BenchmarkStats {
+        &self.stats
+    }
+
+    /// Initialize the stats timer. Call this before starting the prover.
+    pub fn init_stats(&mut self) {
+        self.stats.init();
     }
 
     /// Generate a message of the target byte size.
@@ -156,10 +163,10 @@ impl BenchmarkInputSource {
 
         // Check if we have enough receive budget for expected response
         if let Some(available_recv) = budget.available_recv_bytes() {
-            if available_recv < self.target_request_bytes {
+            if available_recv < self.target_response_bytes as usize {
                 debug!(
                     "Receive budget exhausted: {available_recv} available, {} needed",
-                    self.target_request_bytes
+                    self.target_response_bytes
                 );
                 return false;
             }
@@ -176,12 +183,13 @@ impl InputSource for BenchmarkInputSource {
         _config: &ProveConfig,
         past_messages: &[ChatMessage],
     ) -> anyhow::Result<Option<ChatMessage>> {
-        // Log previous assistant response if any
+        // Complete the previous round if there was one
         if let Some(last) = past_messages.last() {
+            let response_size = last.content().len();
+            self.stats.complete_round(response_size);
             debug!(
                 "Round {} complete. Assistant response: {} bytes",
-                self.round,
-                last.content().len()
+                self.round, response_size
             );
         }
 
@@ -195,6 +203,9 @@ impl InputSource for BenchmarkInputSource {
         let message = self.generate_message();
         let message_len = message.len();
 
+        // Start timing for this round
+        self.stats.start_round(message_len);
+
         info!(
             "Round {}: Generating message of {} bytes, requesting ~{} response bytes",
             self.round + 1,
@@ -206,68 +217,4 @@ impl InputSource for BenchmarkInputSource {
 
         Ok(Some(ChatMessage::user(message)))
     }
-}
-
-#[tokio::main]
-async fn main() -> anyhow::Result<()> {
-    tracing_subscriber::fmt::init();
-
-    let _ = dotenvy::dotenv().ok();
-
-    // Required configuration
-    let api_key = dotenvy::var("MODEL_API_KEY").context("MODEL_API_KEY must be set")?;
-    let domain = dotenvy::var("MODEL_API_DOMAIN").context("MODEL_API_DOMAIN must be set")?;
-    let model_id = dotenvy::var("MODEL_ID").context("MODEL_ID must be set")?;
-
-    // Optional configuration with defaults
-    let port = dotenvy::var("MODEL_API_PORT")
-        .map(|p| p.parse::<u16>())
-        .unwrap_or(Ok(443))?;
-
-    let target_request_bytes = dotenvy::var("BENCHMARK_REQUEST_BYTES")
-        .map(|b| b.parse::<usize>())
-        .unwrap_or(Ok(500))?;
-
-    let target_response_bytes = dotenvy::var("BENCHMARK_RESPONSE_BYTES")
-        .map(|t| t.parse::<u32>())
-        .unwrap_or(Ok(500))?;
-
-    let max_rounds = dotenvy::var("BENCHMARK_MAX_ROUNDS")
-        .ok()
-        .map(|r| r.parse::<usize>())
-        .transpose()?
-        .or(Some(5));
-
-    info!("Benchmark configuration:");
-    info!("  Domain: {}:{}", domain, port);
-    info!("  Model: {}", model_id);
-    info!("  Target request size: {} bytes", target_request_bytes);
-    info!("  Target response size: {} bytes", target_response_bytes);
-    info!(
-        "  Max rounds: {}",
-        max_rounds
-            .map(|r| r.to_string())
-            .unwrap_or_else(|| "unlimited".to_string())
-    );
-
-    let api_provider = ApiProvider::builder()
-        .domain(domain)
-        .port(port)
-        .api_key(api_key)
-        .build()
-        .context("Failed to build ApiProvider")?;
-
-    let config = ProveConfig::builder()
-        .provider(api_provider)
-        .model_id(model_id)
-        .max_response_tokens(target_response_bytes / BYTES_PER_TOKEN as u32)
-        .build()
-        .context("Failed to build ProveConfig")?;
-
-    let prover = AgentProver::Direct(DirectProver {});
-
-    let input_source =
-        BenchmarkInputSource::new(target_request_bytes, target_response_bytes, max_rounds);
-
-    with_input_source(input_source, prover.run(&config)).await
 }
