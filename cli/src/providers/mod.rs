@@ -2,22 +2,24 @@ mod anthropic;
 pub mod budget;
 mod fireworks;
 pub mod interaction;
+pub mod message;
 mod mistral;
 mod redpill;
 mod unknown;
 
 use ambassador::{delegatable_trait, Delegate};
 pub use anthropic::Anthropic;
+use anyhow::Result;
 use derive_builder::Builder;
-pub use fireworks::Fireworks;
-pub use mistral::Mistral;
-pub use redpill::Redpill;
-pub use unknown::Unknown;
-
 use dialoguer::console::style;
 use enum_dispatch::enum_dispatch;
+pub use fireworks::Fireworks;
+pub use message::ChatMessage;
+pub use mistral::Mistral;
+pub use redpill::Redpill;
 use serde_json::{json, Value};
 use tracing::info;
+pub use unknown::Unknown;
 
 #[delegatable_trait]
 #[enum_dispatch]
@@ -32,25 +34,21 @@ pub trait Provider {
         vec![("Authorization", format!("Bearer {}", api_key))]
     }
 
-    /// Build the request body for a chat completion (default: OpenAI-style)
-    fn build_chat_body(&self, model_id: &str, messages: &[Value]) -> Value {
-        json!({
-            "model": model_id,
-            "messages": messages
-        })
-    }
-
     /// Build the request body with an optional max_tokens limit.
     ///
     /// Default implementation calls `build_chat_body` and merges `max_tokens` if provided.
     /// Providers can override for custom behavior.
-    fn build_chat_body_with_limit(
+    fn build_chat_body(
         &self,
         model_id: &str,
-        messages: &[Value],
+        messages: &[ChatMessage],
         max_tokens: Option<u32>,
     ) -> Value {
-        let mut body = self.build_chat_body(model_id, messages);
+        let mut body = json!({
+            "model": model_id,
+            "messages": messages,
+        });
+
         if let Some(tokens) = max_tokens {
             if let Some(obj) = body.as_object_mut() {
                 obj.insert("max_tokens".to_string(), json!(tokens));
@@ -60,8 +58,17 @@ pub trait Provider {
     }
 
     /// Parse the assistant's content from the response (default: OpenAI-style)
-    fn parse_chat_content<'a>(&self, response: &'a Value) -> Option<&'a str> {
-        response["choices"][0]["message"]["content"].as_str()
+    fn parse_chat_reply_message<'a>(&self, response: &'a Value) -> Result<ChatMessage> {
+        let message = response["choices"][0]["message"]
+            .as_object()
+            .ok_or_else(|| anyhow::anyhow!("Failed to parse assistant message from response"))?;
+
+        let content = message
+            .get("content")
+            .and_then(|c| c.as_str())
+            .ok_or_else(|| anyhow::anyhow!("Missing content in assistant message"))?;
+
+        Ok(ChatMessage::assistant(content))
     }
 
     /// Endpoint path for listing available models (default: OpenAI-style)

@@ -1,4 +1,5 @@
-use super::Provider;
+use super::{ChatMessage, Provider};
+use anyhow::Result;
 use serde_json::{json, Value};
 
 #[derive(Debug, Clone, Default)]
@@ -6,6 +7,9 @@ pub struct Anthropic;
 
 impl Anthropic {
     const API_VERSION: &'static str = "2023-06-01";
+
+    /// Maximum tokens allowed for chat completion
+    pub(crate) const MAX_TOKENS: u32 = 1024 * 10;
 }
 
 impl Provider for Anthropic {
@@ -20,14 +24,10 @@ impl Provider for Anthropic {
         ]
     }
 
-    fn build_chat_body(&self, _model_id: &str, _messages: &[Value]) -> Value {
-        unimplemented!("Use build_chat_body_with_limit instead for Anthropic provider")
-    }
-
-    fn build_chat_body_with_limit(
+    fn build_chat_body(
         &self,
         model_id: &str,
-        messages: &[Value],
+        messages: &[ChatMessage],
         max_tokens: Option<u32>,
     ) -> Value {
         json!({
@@ -38,8 +38,16 @@ impl Provider for Anthropic {
         })
     }
 
-    fn parse_chat_content<'a>(&self, response: &'a Value) -> Option<&'a str> {
-        response["content"][0]["text"].as_str()
+    fn parse_chat_reply_message<'a>(&self, response: &'a Value) -> Result<ChatMessage> {
+        let message = response["content"][0].as_object().ok_or_else(|| {
+            anyhow::anyhow!("Failed to parse assistant message from Anthropic response")
+        })?;
+
+        let content = message
+            .get("text")
+            .and_then(|c| c.as_str())
+            .ok_or_else(|| anyhow::anyhow!("Missing content in assistant message"))?;
+        Ok(ChatMessage::assistant(content))
     }
 
     fn models_headers_with_key(&self, api_key: &str) -> Vec<(&'static str, String)> {

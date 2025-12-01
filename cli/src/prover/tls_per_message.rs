@@ -19,7 +19,6 @@ use crate::ui::user_messages::display_proofs;
 use anyhow::{Context, Result};
 use async_trait::async_trait;
 use hyper::client::conn::http1::SendRequest;
-use serde_json::Value;
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 use tlsn_prover::{state, Prover as TlsnProver, ProverError};
@@ -57,7 +56,7 @@ impl Prover for TlsPerMessageProver {
         };
 
         let mut stored_proofs = Vec::<PathBuf>::new();
-        let mut all_messages: Vec<Value> = vec![];
+        let mut all_messages = vec![];
 
         // Set up the current instance of the prover
         let mut current_instance_handle: JoinHandle<Result<ProverWithRequestSender>> =

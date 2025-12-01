@@ -1,14 +1,21 @@
 use crate::providers::budget::ByteBudget;
+use crate::providers::message::ChatMessage;
+use crate::ProveConfig;
 use anyhow::Context;
 use dialoguer::console::{style, Term};
 use std::io::stdin;
 use std::sync::{Arc, Mutex};
-use tracing::info;
+use tracing::{debug, info};
 
 /// Input source trait for reading user input.
 /// Implementations decide how to handle budget display.
 pub trait InputSource: Send + 'static {
-    fn next(&mut self, budget: &ByteBudget) -> anyhow::Result<Option<String>>;
+    fn next_message(
+        &mut self,
+        budget: &ByteBudget,
+        config: &ProveConfig,
+        past_messages: &[ChatMessage],
+    ) -> anyhow::Result<Option<ChatMessage>>;
 }
 
 tokio::task_local! {
@@ -26,13 +33,15 @@ where
 }
 
 /// Read user input with budget information displayed in the prompt.
-pub(crate) fn try_read_user_input_with_budget(
+pub(crate) fn get_new_user_message(
     budget: &ByteBudget,
-) -> anyhow::Result<Option<String>> {
+    config: &ProveConfig,
+    messages: &[ChatMessage],
+) -> anyhow::Result<Option<ChatMessage>> {
     INPUT_CTX
         .try_with(|arc| {
             let mut guard = arc.lock().unwrap();
-            guard.next(budget)
+            guard.next_message(budget, config, messages)
         })
         .map_err(|_| anyhow::anyhow!("No input source in context"))?
 }
@@ -79,28 +88,46 @@ fn is_budget_exhausted(send_bytes: usize, recv_bytes: usize) -> bool {
 pub struct StdinInputSource;
 
 impl InputSource for StdinInputSource {
-    fn next(&mut self, budget: &ByteBudget) -> anyhow::Result<Option<String>> {
+    fn next_message(
+        &mut self,
+        budget: &ByteBudget,
+        config: &ProveConfig,
+        past_messages: &[ChatMessage],
+    ) -> anyhow::Result<Option<ChatMessage>> {
         let term = Term::stdout();
 
+        // Show the assistants reply:
+
+        // 7) Display response and get content length
+        if let Some(last_message) = past_messages.last() {
+            let content = &last_message.content;
+            let header = style("🤖 Assistant's response:").bold().magenta().dim();
+
+            let body = style(content);
+            info!(target: "plain", "\n{header}\n({}) {body}\n", config.model_id);
+        }
+
         // Build prompt with optional budget info and exhaustion warning
-        let (budget_suffix, exhaustion_warning) =
-            match (budget.available_input_bytes(), budget.available_recv_bytes()) {
-                (Some(send), Some(recv)) => {
-                    let suffix = format!(" {}", style(format_budget_info(send, recv)).dim());
-                    let warning = if is_budget_exhausted(send, recv) {
-                        format!(
-                            "\n{}",
-                            style("⚠ Budget exhausted - type 'exit' to end session")
-                                .red()
-                                .bold()
-                        )
-                    } else {
-                        String::new()
-                    };
-                    (suffix, warning)
-                }
-                _ => (String::new(), String::new()),
-            };
+        let (budget_suffix, exhaustion_warning) = match (
+            budget.available_input_bytes(),
+            budget.available_recv_bytes(),
+        ) {
+            (Some(send), Some(recv)) => {
+                let suffix = format!(" {}", style(format_budget_info(send, recv)).dim());
+                let warning = if is_budget_exhausted(send, recv) {
+                    format!(
+                        "\n{}",
+                        style("⚠ Budget exhausted - type 'exit' to end session")
+                            .red()
+                            .bold()
+                    )
+                } else {
+                    String::new()
+                };
+                (suffix, warning)
+            }
+            _ => (String::new(), String::new()),
+        };
 
         info!(
             target: "plain",
@@ -121,7 +148,7 @@ impl InputSource for StdinInputSource {
         if line.is_empty() || line.eq_ignore_ascii_case("exit") {
             Ok(None)
         } else {
-            Ok(Some(line.to_string()))
+            Ok(Some(ChatMessage::user(line)))
         }
     }
 }
@@ -129,11 +156,11 @@ impl InputSource for StdinInputSource {
 /// Vector-based input source for testing.
 /// Ignores budget info (not displayed in tests).
 pub struct VecInputSource {
-    buf: std::vec::IntoIter<Option<String>>,
+    buf: std::vec::IntoIter<String>,
 }
 
 impl VecInputSource {
-    pub fn new(lines: Vec<Option<String>>) -> Self {
+    pub fn new(lines: Vec<String>) -> Self {
         Self {
             buf: lines.into_iter(),
         }
@@ -141,7 +168,22 @@ impl VecInputSource {
 }
 
 impl InputSource for VecInputSource {
-    fn next(&mut self, _budget: &ByteBudget) -> anyhow::Result<Option<String>> {
-        Ok(self.buf.next().flatten())
+    fn next_message(
+        &mut self,
+        _budget: &ByteBudget,
+        _config: &ProveConfig,
+        past_messages: &[ChatMessage],
+    ) -> anyhow::Result<Option<ChatMessage>> {
+        if let Some(prev_message) = past_messages.last() {
+            debug!("Previous message: {}", prev_message.content);
+        }
+
+        if let Some(msg) = self.buf.next() {
+            debug!("Providing input message: {}", msg);
+            return Ok(Some(ChatMessage::user(msg)));
+        }
+
+        debug!("No more input messages available");
+        Ok(None)
     }
 }

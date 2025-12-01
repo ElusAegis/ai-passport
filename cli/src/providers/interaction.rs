@@ -5,17 +5,17 @@
 
 use crate::config::ProveConfig;
 use crate::providers::budget::ByteBudget;
+use crate::providers::message::ChatMessage;
 use crate::providers::Provider;
-use crate::ui::io_input::try_read_user_input_with_budget;
+use crate::ui::io_input::get_new_user_message;
 use crate::ui::spinner::with_spinner_future;
 use anyhow::{Context, Result};
-use dialoguer::console::style;
 use http_body_util::BodyExt;
 use hyper::client::conn::http1::SendRequest;
 use hyper::header::{ACCEPT_ENCODING, CONNECTION, CONTENT_TYPE, HOST, TRANSFER_ENCODING};
 use hyper::{Method, Request, StatusCode};
 use serde_json::Value;
-use tracing::{debug, info, trace};
+use tracing::{debug, trace};
 
 /// Execute a single interaction round (user input -> model response).
 ///
@@ -32,75 +32,41 @@ use tracing::{debug, info, trace};
 pub async fn single_interaction_round(
     request_sender: &mut SendRequest<String>,
     config: &ProveConfig,
-    messages: &mut Vec<Value>,
+    messages: &mut Vec<ChatMessage>,
     close_connection: bool,
     budget: &mut ByteBudget,
 ) -> Result<bool> {
     // 1) Read user input (with budget info displayed)
-    let Some(user_input) =
-        try_read_user_input_with_budget(budget).context("failed to read user input")?
+    let Some(user_message) =
+        get_new_user_message(budget, config, messages).context("failed to read user input")?
     else {
         return Ok(true);
     };
+    let user_message_len = user_message.content().len();
 
     // 2) Add user message to history
-    messages.push(serde_json::json!({
-        "role": "user",
-        "content": user_input
-    }));
-
-    // 3) Calculate max_tokens from remaining receive budget
-    let max_tokens = budget.max_tokens_for_response();
-    debug!("budget: max_tokens for response = {:?}", max_tokens);
+    messages.push(user_message);
 
     // 4) Build request with budget-aware max_tokens
-    let request = generate_request_with_limit(messages, config, close_connection, max_tokens)
-        .context("Error generating request")?;
-
-    // 5) Check send budget before sending (using actual total size)
-    let request_total_len = budget.check_send(&request)?;
-    let user_input_len = user_input.len();
+    let (request, request_total_len) =
+        generate_request_with_limit(messages, config, close_connection, budget)
+            .context("Error generating request")?;
 
     trace!("Request: {:?}", request);
     trace!("Sending request to Model's API...");
 
     // 6) Send request and get response
-    let (received_assistant_message, response_total_len): (Value, usize) = with_spinner_future(
-        "processing...",
-        get_response_with_sizes(request_sender, request, config),
-    )
-    .await?;
+    let (received_assistant_message, response_total_len): (ChatMessage, usize) =
+        with_spinner_future(
+            "processing...",
+            get_response_with_sizes(request_sender, request, config),
+        )
+        .await?;
+    let assistant_message_len = received_assistant_message.content().len();
 
-    // 7) Display response and get content length
-    let header = style("🤖 Assistant's response:").bold().magenta().dim();
-    let content = received_assistant_message
-        .get("content")
-        .and_then(|v| v.as_str())
-        .context("Failed to get assistant's message content")?;
-    let content_len = content.len();
-
-    let body = style(content);
-    info!(target: "plain", "\n{header}\n({}) {body}\n", config.model_id);
-
-    // 8) Record sent bytes with content size (updates overhead tracking)
-    budget.record_sent(request_total_len, user_input_len);
-
-    // 9) Record received bytes with content size (updates overhead tracking)
-    budget.record_recv(response_total_len, content_len);
-
-    // Debug: log overhead ratios
-    debug!(
-        "overhead ↑: total={} content={} (ratio={:.1}x)",
-        request_total_len,
-        user_input_len,
-        request_total_len as f64 / user_input_len.max(1) as f64
-    );
-    debug!(
-        "overhead ↓: total={} content={} (ratio={:.1}x)",
-        response_total_len,
-        content_len,
-        response_total_len as f64 / content_len.max(1) as f64
-    );
+    // 8) Record sent and received bytes with content size (updates overhead tracking)
+    budget.record_sent(request_total_len, user_message_len);
+    budget.record_recv(response_total_len, assistant_message_len);
 
     // 10) Add assistant message to history
     messages.push(received_assistant_message);
@@ -114,7 +80,7 @@ async fn get_response_with_sizes(
     request_sender: &mut SendRequest<String>,
     request: Request<String>,
     config: &ProveConfig,
-) -> Result<(Value, usize)> {
+) -> Result<(ChatMessage, usize)> {
     let response = request_sender
         .send_request(request)
         .await
@@ -158,26 +124,29 @@ async fn get_response_with_sizes(
         serde_json::to_string_pretty(&parsed).context("Error pretty printing the response")?
     );
 
-    let content = config
+    let received_assistant_message = config
         .provider
-        .parse_chat_content(&parsed)
+        .parse_chat_reply_message(&parsed)
         .context("Failed to parse assistant content from response")?;
 
-    let received_assistant_message = serde_json::json!({"role": "assistant", "content": content});
     Ok((received_assistant_message, total_len))
 }
 
 /// Build an HTTP request for the model API with optional max_tokens limit.
 fn generate_request_with_limit(
-    messages: &[Value],
+    messages: &[ChatMessage],
     config: &ProveConfig,
     close_connection: bool,
-    max_tokens: Option<u32>,
-) -> Result<Request<String>> {
-    let json_body =
-        config
-            .provider
-            .build_chat_body_with_limit(&config.model_id, messages, max_tokens);
+    budget: &ByteBudget,
+) -> Result<(Request<String>, usize)> {
+    // 3) Calculate max_tokens from remaining receive budget
+    let max_tokens = budget.max_tokens_for_response();
+
+    debug!("budget: max_tokens for response = {:?}", max_tokens);
+
+    let json_body = config
+        .provider
+        .build_chat_body(&config.model_id, messages, max_tokens);
 
     let chat_endpoint = config.provider.chat_endpoint();
 
@@ -200,7 +169,15 @@ fn generate_request_with_limit(
         builder = builder.header(name, value);
     }
 
-    builder
+    let request = builder
         .body(json_body.to_string())
-        .context("Error building the request")
+        .context("Error building the request")?;
+
+    // Get total length of the request and check against budget
+    let total_len = ByteBudget::calculate_request_size(&request);
+    budget
+        .check_request_fits(total_len)
+        .context("Request exceeds available budget")?;
+
+    Ok((request, total_len))
 }

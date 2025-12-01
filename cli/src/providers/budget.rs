@@ -143,9 +143,7 @@ impl ByteBudget {
     ///
     /// Takes the actual total bytes (headers + body) that will be sent.
     /// Returns an error with a helpful message if budget would be exceeded.
-    pub fn check_send(&self, request: &Request<String>) -> Result<usize> {
-        let total_bytes = Self::calculate_request_size(request);
-
+    pub fn check_request_fits(&self, total_bytes: usize) -> Result<()> {
         match self {
             Self::Unlimited => {}
             Self::Limited { sent_remaining, .. } => {
@@ -160,7 +158,7 @@ impl ByteBudget {
             }
         }
 
-        Ok(total_bytes)
+        Ok(())
     }
 
     /// Record bytes sent and update remaining budget.
@@ -183,6 +181,13 @@ impl ByteBudget {
                 total_bytes, sent_remaining
             );
         }
+
+        debug!(
+            "overhead ↑: total={} content={} (ratio={:.1}x)",
+            total_bytes,
+            content_bytes,
+            total_bytes as f64 / content_bytes.max(1) as f64
+        );
     }
 
     /// Record bytes received and update remaining budget.
@@ -205,6 +210,13 @@ impl ByteBudget {
                 total_bytes, recv_remaining
             );
         }
+
+        debug!(
+            "overhead ↓: total={} content={} (ratio={:.1}x)",
+            total_bytes,
+            content_bytes,
+            total_bytes as f64 / content_bytes.max(1) as f64
+        );
     }
 
     /// Calculate max_tokens based on remaining receive budget.
@@ -283,7 +295,7 @@ impl ByteBudget {
     }
 
     /// Calculate the actual HTTP/1.1 request size on the wire.
-    fn calculate_request_size(request: &Request<String>) -> usize {
+    pub(crate) fn calculate_request_size(request: &Request<String>) -> usize {
         // Request line: "POST /path HTTP/1.1\r\n"
         let method_len = request.method().as_str().len();
         let uri_len = request.uri().to_string().len();
@@ -400,7 +412,8 @@ mod tests {
         assert!(budget.is_unlimited());
 
         let request = make_test_request("test body");
-        assert!(budget.check_send(&request).is_ok());
+        let request_size = ByteBudget::calculate_request_size(&request);
+        assert!(budget.check_request_fits(request_size).is_ok());
         assert!(budget.max_tokens_for_response().is_none());
         assert!(budget.available_input_bytes().is_none());
     }
@@ -410,12 +423,14 @@ mod tests {
         // Small request should succeed
         let budget = make_limited_budget(1000, 2000);
         let small_request = make_test_request("small");
-        assert!(budget.check_send(&small_request).is_ok());
+        let small_request_size = ByteBudget::calculate_request_size(&small_request);
+        assert!(budget.check_request_fits(small_request_size).is_ok());
 
         // Large request should fail
         let budget = make_limited_budget(50, 2000);
         let request = make_test_request("this body is too large for the budget");
-        assert!(budget.check_send(&request).is_err());
+        let request_size = ByteBudget::calculate_request_size(&request);
+        assert!(budget.check_request_fits(request_size).is_err());
     }
 
     #[test]
