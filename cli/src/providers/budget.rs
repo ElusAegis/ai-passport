@@ -3,11 +3,10 @@
 //! This module provides types to track and enforce byte limits on send/receive
 //! channels, primarily for TLS-notarized sessions where channel capacity is limited.
 
-use crate::config::notary::NotaryConfig;
+use crate::NotaryConfig;
 use anyhow::{bail, Result};
 use hyper::body::Bytes;
 use hyper::Request;
-use std::sync::{Arc, Mutex};
 use tracing::{debug, warn};
 
 /// Estimated bytes per token for response size calculation.
@@ -84,59 +83,83 @@ impl ObservedOverhead {
     }
 }
 
-/// Tracks byte budget for send/receive channels.
-#[derive(Debug, Clone)]
-pub enum ByteBudget {
+/// Channel capacity configuration.
+///
+/// Defines the byte limits for send/receive channels. Use `Unlimited` for
+/// passthrough modes (DirectProver, TEE) or `Limited` for TLS-notarized sessions.
+#[derive(Debug, Clone, Default)]
+pub enum ChannelCapacity {
     /// No limits (DirectProver, TEE).
+    #[default]
     Unlimited,
-    /// Limited budget with tracking.
+    /// Limited capacity with specific byte limits.
     Limited {
-        /// Bytes remaining for sending.
-        sent_remaining: usize,
-        /// Bytes remaining for receiving.
-        recv_remaining: usize,
-        /// Shared overhead state (learns from observed values).
-        overhead: Arc<Mutex<ObservedOverhead>>,
+        /// Maximum bytes that can be sent.
+        sent_capacity: usize,
+        /// Maximum bytes that can be received.
+        recv_capacity: usize,
     },
 }
 
-impl ByteBudget {
-    /// Create a limited budget from notary configuration.
-    pub fn from_notary(config: &NotaryConfig) -> Self {
-        Self::Limited {
-            sent_remaining: config.max_total_sent,
-            recv_remaining: config.max_total_recv,
-            overhead: Arc::new(Mutex::new(ObservedOverhead::default())),
+impl ChannelCapacity {
+    /// Create a limited capacity from notary configuration.
+    pub fn from_notary(notary: &NotaryConfig) -> Self {
+        ChannelCapacity::Limited {
+            sent_capacity: notary.max_total_sent,
+            recv_capacity: notary.max_total_recv,
         }
     }
+}
 
-    /// Create a limited budget with shared overhead state.
-    ///
-    /// Use this when creating multiple budgets (e.g., per-message prover)
-    /// that should share the same observed overhead values.
-    pub fn from_notary_with_shared_overhead(
-        config: &NotaryConfig,
-        overhead: Arc<Mutex<ObservedOverhead>>,
-    ) -> Self {
-        Self::Limited {
-            sent_remaining: config.max_total_sent,
-            recv_remaining: config.max_total_recv,
-            overhead,
-        }
-    }
+/// Tracks byte budget for send/receive channels.
+///
+/// Monitors usage against capacity, learns overhead from observed values,
+/// and provides helpers for calculating remaining budget and max tokens.
+#[derive(Debug, Clone, Default)]
+pub struct ChannelBudget {
+    /// Bytes sent over the channel.
+    sent: usize,
+    /// Bytes received over the channel.
+    recv: usize,
+    /// The capacity configuration (unlimited or limited).
+    capacity: ChannelCapacity,
+    /// Learned overhead state (improves estimates from observed values).
+    overhead: ObservedOverhead,
+}
 
-    /// Get the shared overhead state (for creating sibling budgets).
-    /// Returns `None` for unlimited budgets.
-    pub fn shared_overhead(&self) -> Option<Arc<Mutex<ObservedOverhead>>> {
-        match self {
-            Self::Unlimited => None,
-            Self::Limited { overhead, .. } => Some(Arc::clone(overhead)),
+impl ChannelBudget {
+    /// Create a budget with the given capacity.
+    pub fn with_capacity(capacity: ChannelCapacity) -> Self {
+        ChannelBudget {
+            capacity,
+            ..Default::default()
         }
     }
 
     /// Create an unlimited budget (for passthrough/TEE modes).
     pub fn unlimited() -> Self {
-        Self::Unlimited
+        ChannelBudget {
+            capacity: ChannelCapacity::Unlimited,
+            ..Default::default()
+        }
+    }
+
+    /// Reset usage counters while preserving learned overhead.
+    ///
+    /// Use this for per-message prover where each message gets fresh capacity
+    /// but overhead learning should persist across messages.
+    pub fn reset(&mut self) -> &mut Self {
+        self.recv = 0;
+        self.sent = 0;
+
+        self
+    }
+
+    /// Update the capacity configuration.
+    pub fn set_capacity(&mut self, capacity: ChannelCapacity) -> &mut Self {
+        self.capacity = capacity;
+
+        self
     }
 
     /// Check if we can send the given number of bytes.
@@ -144,15 +167,14 @@ impl ByteBudget {
     /// Takes the actual total bytes (headers + body) that will be sent.
     /// Returns an error with a helpful message if budget would be exceeded.
     pub fn check_request_fits(&self, total_bytes: usize) -> Result<()> {
-        match self {
-            Self::Unlimited => {}
-            Self::Limited { sent_remaining, .. } => {
-                if total_bytes > *sent_remaining {
+        match self.capacity {
+            ChannelCapacity::Unlimited => {}
+            ChannelCapacity::Limited { sent_capacity, .. } => {
+                if total_bytes + self.sent > sent_capacity {
+                    let remaining = sent_capacity.saturating_sub(self.sent);
                     bail!(
-                        "Insufficient send budget. Need {} bytes but only {} remaining.\n\
+                        "Insufficient send budget. Need {total_bytes} bytes but only {remaining} remaining.\n\
                          Tip: Use shorter messages or start a new session.",
-                        total_bytes,
-                        sent_remaining
                     );
                 }
             }
@@ -165,25 +187,16 @@ impl ByteBudget {
     ///
     /// Also updates the observed overhead for future estimates.
     pub fn record_sent(&mut self, total_bytes: usize, content_bytes: usize) {
-        if let Self::Limited {
-            sent_remaining,
-            overhead,
-            ..
-        } = self
-        {
-            *sent_remaining = sent_remaining.saturating_sub(total_bytes);
-            overhead
-                .lock()
-                .unwrap()
-                .update_request(total_bytes, content_bytes);
-            debug!(
-                "budget: sent {} bytes, remaining={}",
-                total_bytes, sent_remaining
-            );
+        self.sent += total_bytes;
+        self.overhead.update_request(total_bytes, content_bytes);
+
+        if let ChannelCapacity::Limited { sent_capacity, .. } = self.capacity {
+            let remaining = sent_capacity.saturating_sub(self.sent);
+            debug!("budget: sent {total_bytes} bytes, remaining={remaining}");
         }
 
         debug!(
-            "overhead ↑: total={} content={} (ratio={:.1}x)",
+            "sent ↑: total={} content={} (ratio={:.1}x)",
             total_bytes,
             content_bytes,
             total_bytes as f64 / content_bytes.max(1) as f64
@@ -194,25 +207,16 @@ impl ByteBudget {
     ///
     /// Also updates the observed overhead for future estimates.
     pub fn record_recv(&mut self, total_bytes: usize, content_bytes: usize) {
-        if let Self::Limited {
-            recv_remaining,
-            overhead,
-            ..
-        } = self
-        {
-            *recv_remaining = recv_remaining.saturating_sub(total_bytes);
-            overhead
-                .lock()
-                .unwrap()
-                .update_response(total_bytes, content_bytes);
-            debug!(
-                "budget: recv {} bytes, remaining={}",
-                total_bytes, recv_remaining
-            );
+        self.recv += total_bytes;
+        self.overhead.update_response(total_bytes, content_bytes);
+
+        if let ChannelCapacity::Limited { recv_capacity, .. } = self.capacity {
+            let remaining = recv_capacity.saturating_sub(self.recv);
+            debug!("budget: received {total_bytes} bytes, remaining={remaining}");
         }
 
         debug!(
-            "overhead ↓: total={} content={} (ratio={:.1}x)",
+            "received ↓: total={} content={} (ratio={:.1}x)",
             total_bytes,
             content_bytes,
             total_bytes as f64 / content_bytes.max(1) as f64
@@ -225,14 +229,11 @@ impl ByteBudget {
     /// Returns `None` for unlimited budgets, meaning no limit should be set.
     /// Returns `Some(tokens)` for limited budgets.
     pub fn max_tokens_for_response(&self) -> Option<u32> {
-        match self {
-            Self::Unlimited => None,
-            Self::Limited {
-                recv_remaining,
-                overhead,
-                ..
-            } => {
-                let response_overhead = overhead.lock().unwrap().response_overhead();
+        match self.capacity {
+            ChannelCapacity::Unlimited => None,
+            ChannelCapacity::Limited { recv_capacity, .. } => {
+                let response_overhead = self.overhead.response_overhead();
+                let recv_remaining = recv_capacity.saturating_sub(self.recv);
                 let usable = recv_remaining.saturating_sub(response_overhead);
                 let tokens = (usable / BYTES_PER_TOKEN) as u32;
                 // Ensure at least some tokens if there's any budget
@@ -247,14 +248,11 @@ impl ByteBudget {
     /// Returns `None` for unlimited budgets.
     /// Returns `Some(bytes)` showing how many bytes the user can still send.
     pub fn available_input_bytes(&self) -> Option<usize> {
-        match self {
-            Self::Unlimited => None,
-            Self::Limited {
-                sent_remaining,
-                overhead,
-                ..
-            } => {
-                let request_overhead = overhead.lock().unwrap().request_overhead();
+        match self.capacity {
+            ChannelCapacity::Unlimited => None,
+            ChannelCapacity::Limited { sent_capacity, .. } => {
+                let request_overhead = self.overhead.request_overhead();
+                let sent_remaining = sent_capacity.saturating_sub(self.sent);
                 Some(sent_remaining.saturating_sub(request_overhead))
             }
         }
@@ -264,15 +262,18 @@ impl ByteBudget {
     ///
     /// Returns `None` for unlimited budgets.
     pub fn available_recv_bytes(&self) -> Option<usize> {
-        match self {
-            Self::Unlimited => None,
-            Self::Limited { recv_remaining, .. } => Some(*recv_remaining),
+        match self.capacity {
+            ChannelCapacity::Unlimited => None,
+            ChannelCapacity::Limited { recv_capacity, .. } => {
+                let recv_remaining = recv_capacity.saturating_sub(self.recv);
+                Some(recv_remaining)
+            }
         }
     }
 
     /// Check if this is an unlimited budget.
     pub fn is_unlimited(&self) -> bool {
-        matches!(self, Self::Unlimited)
+        matches!(self.capacity, ChannelCapacity::Unlimited)
     }
 
     /// Calculate the actual HTTP/1.1 response size on the wire.
@@ -318,70 +319,6 @@ impl ByteBudget {
     }
 }
 
-/// Tracks overhead statistics for debugging and tuning.
-///
-/// Collects measurements to help determine if overhead is constant
-/// and could be hardcoded in the future.
-#[allow(dead_code)] // For future use when we want aggregate stats
-#[derive(Debug, Default)]
-pub struct OverheadStats {
-    /// Request header overhead per request (total - body).
-    pub request_overhead: Vec<usize>,
-    /// Response header overhead per response (total - body).
-    pub response_overhead: Vec<usize>,
-}
-
-#[allow(dead_code)] // For future use when we want aggregate stats
-impl OverheadStats {
-    /// Create a new overhead stats tracker.
-    pub fn new() -> Self {
-        Self::default()
-    }
-
-    /// Record request overhead.
-    pub fn record_request(&mut self, body_bytes: usize, total_bytes: usize) {
-        let overhead = total_bytes.saturating_sub(body_bytes);
-        self.request_overhead.push(overhead);
-    }
-
-    /// Record response overhead.
-    pub fn record_response(&mut self, body_bytes: usize, total_bytes: usize) {
-        let overhead = total_bytes.saturating_sub(body_bytes);
-        self.response_overhead.push(overhead);
-    }
-
-    /// Log a summary of observed overhead.
-    pub fn log_summary(&self) {
-        if !self.request_overhead.is_empty() {
-            let avg: usize =
-                self.request_overhead.iter().sum::<usize>() / self.request_overhead.len();
-            let min = self.request_overhead.iter().min().unwrap_or(&0);
-            let max = self.request_overhead.iter().max().unwrap_or(&0);
-            debug!(
-                "overhead stats: request overhead avg={}, min={}, max={} (n={})",
-                avg,
-                min,
-                max,
-                self.request_overhead.len()
-            );
-        }
-
-        if !self.response_overhead.is_empty() {
-            let avg: usize =
-                self.response_overhead.iter().sum::<usize>() / self.response_overhead.len();
-            let min = self.response_overhead.iter().min().unwrap_or(&0);
-            let max = self.response_overhead.iter().max().unwrap_or(&0);
-            debug!(
-                "overhead stats: response overhead avg={}, min={}, max={} (n={})",
-                avg,
-                min,
-                max,
-                self.response_overhead.len()
-            );
-        }
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -398,21 +335,20 @@ mod tests {
     }
 
     /// Helper to create a limited budget for tests.
-    fn make_limited_budget(sent: usize, recv: usize) -> ByteBudget {
-        ByteBudget::Limited {
-            sent_remaining: sent,
-            recv_remaining: recv,
-            overhead: Arc::new(Mutex::new(ObservedOverhead::default())),
-        }
+    fn make_limited_budget(sent_capacity: usize, recv_capacity: usize) -> ChannelBudget {
+        ChannelBudget::with_capacity(ChannelCapacity::Limited {
+            sent_capacity,
+            recv_capacity,
+        })
     }
 
     #[test]
     fn test_unlimited_budget() {
-        let budget = ByteBudget::unlimited();
+        let budget = ChannelBudget::unlimited();
         assert!(budget.is_unlimited());
 
         let request = make_test_request("test body");
-        let request_size = ByteBudget::calculate_request_size(&request);
+        let request_size = ChannelBudget::calculate_request_size(&request);
         assert!(budget.check_request_fits(request_size).is_ok());
         assert!(budget.max_tokens_for_response().is_none());
         assert!(budget.available_input_bytes().is_none());
@@ -423,13 +359,13 @@ mod tests {
         // Small request should succeed
         let budget = make_limited_budget(1000, 2000);
         let small_request = make_test_request("small");
-        let small_request_size = ByteBudget::calculate_request_size(&small_request);
+        let small_request_size = ChannelBudget::calculate_request_size(&small_request);
         assert!(budget.check_request_fits(small_request_size).is_ok());
 
         // Large request should fail
         let budget = make_limited_budget(50, 2000);
         let request = make_test_request("this body is too large for the budget");
-        let request_size = ByteBudget::calculate_request_size(&request);
+        let request_size = ChannelBudget::calculate_request_size(&request);
         assert!(budget.check_request_fits(request_size).is_err());
     }
 
@@ -439,21 +375,21 @@ mod tests {
 
         budget.record_sent(150, 100); // total=150, content=100
 
-        match budget {
-            ByteBudget::Limited { sent_remaining, .. } => {
-                assert_eq!(sent_remaining, 850);
-            }
-            _ => panic!("Expected Limited budget"),
-        }
+        // After sending 150 bytes, remaining should be 1000 - 150 = 850
+        // available_input_bytes subtracts overhead estimate (285)
+        // So: 850 - 285 = 565
+        assert_eq!(budget.sent, 150);
     }
 
     #[test]
     fn test_max_tokens_calculation() {
-        let budget = make_limited_budget(1000, 2000);
+        let budget = make_limited_budget(1000, 10000);
 
         let tokens = budget.max_tokens_for_response().unwrap();
-        // (2000 - 285) / 4 = 428
-        assert_eq!(tokens, 428);
+        // recv_capacity=10000, recv=0, overhead_estimate=5000
+        // usable = 10000 - 5000 = 5000
+        // tokens = 5000 / 5 = 1000
+        assert_eq!(tokens, 1000);
     }
 
     #[test]
@@ -461,17 +397,29 @@ mod tests {
         let budget = make_limited_budget(1000, 2000);
 
         let available = budget.available_input_bytes().unwrap();
-        // 1000 - 500 = 500
-        assert_eq!(available, 500);
+        // sent_capacity=1000, sent=0, overhead_estimate=285
+        // available = 1000 - 285 = 715
+        assert_eq!(available, 715);
+    }
+
+    #[test]
+    fn test_available_recv_bytes() {
+        let budget = make_limited_budget(1000, 2000);
+
+        let available = budget.available_recv_bytes().unwrap();
+        // recv_capacity=2000, recv=0
+        assert_eq!(available, 2000);
     }
 
     #[test]
     fn test_overhead_updates_via_budget() {
-        let mut budget = make_limited_budget(1000, 2000);
+        let mut budget = make_limited_budget(1000, 10000);
 
         // Initially uses estimates
-        assert_eq!(budget.available_input_bytes().unwrap(), 500); // 1000 - 500 estimate
-        assert_eq!(budget.max_tokens_for_response().unwrap(), 428); // (2000 - 285) / 4
+        // available_input = 1000 - 285 (estimate) = 715
+        assert_eq!(budget.available_input_bytes().unwrap(), 715);
+        // max_tokens = (10000 - 5000) / 5 = 1000
+        assert_eq!(budget.max_tokens_for_response().unwrap(), 1000);
 
         // Record sends/recvs which update overhead
         budget.record_sent(300, 100); // overhead = 200
@@ -482,35 +430,28 @@ mod tests {
         // available_input = 700 - 200 (observed) = 500
         assert_eq!(budget.available_input_bytes().unwrap(), 500);
 
-        // recv_remaining = 2000 - 400 = 1600
-        // max_tokens = (1600 - 200) / 4 = 350
-        assert_eq!(budget.max_tokens_for_response().unwrap(), 350);
+        // recv_remaining = 10000 - 400 = 9600
+        // max_tokens = (9600 - 200) / 5 = 1880
+        assert_eq!(budget.max_tokens_for_response().unwrap(), 1880);
     }
 
     #[test]
-    fn test_shared_overhead_between_budgets() {
-        // Create first budget
-        let mut budget1 = make_limited_budget(1000, 2000);
+    fn test_reset_preserves_overhead() {
+        let mut budget = make_limited_budget(1000, 10000);
 
-        // Get shared overhead for sibling budget
-        let shared = budget1.shared_overhead().unwrap();
+        // Learn some overhead
+        budget.record_sent(300, 100); // overhead = 200
+        budget.record_recv(400, 200); // overhead = 200
 
-        // Create second budget sharing overhead (simulates per-message prover)
-        let budget2 = ByteBudget::Limited {
-            sent_remaining: 1000,
-            recv_remaining: 2000,
-            overhead: shared,
-        };
+        // Reset counters but keep overhead
+        budget.reset();
 
-        // Initially both use estimates
-        assert_eq!(budget1.available_input_bytes().unwrap(), 500);
-        assert_eq!(budget2.available_input_bytes().unwrap(), 500);
+        assert_eq!(budget.sent, 0);
+        assert_eq!(budget.recv, 0);
 
-        // Record on first budget (updates shared overhead)
-        budget1.record_sent(300, 100); // overhead = 200
-
-        // Second budget sees updated overhead
-        assert_eq!(budget2.available_input_bytes().unwrap(), 800); // 1000 - 200 observed
+        // Overhead should still be observed values
+        // available_input = 1000 - 200 (observed) = 800
+        assert_eq!(budget.available_input_bytes().unwrap(), 800);
     }
 
     /// Build the expected HTTP/1.1 wire format string for a request.
@@ -553,7 +494,7 @@ mod tests {
             .unwrap();
 
         let wire_format = build_http11_wire_format(&request);
-        let calculated = ByteBudget::calculate_request_size(&request);
+        let calculated = ChannelBudget::calculate_request_size(&request);
 
         assert_eq!(
             calculated,
@@ -581,7 +522,7 @@ mod tests {
             .unwrap();
 
         let wire_format = build_http11_wire_format(&request);
-        let calculated = ByteBudget::calculate_request_size(&request);
+        let calculated = ChannelBudget::calculate_request_size(&request);
 
         assert_eq!(
             calculated,
@@ -603,7 +544,7 @@ mod tests {
             .unwrap();
 
         let wire_format = build_http11_wire_format(&request);
-        let calculated = ByteBudget::calculate_request_size(&request);
+        let calculated = ChannelBudget::calculate_request_size(&request);
 
         assert_eq!(
             calculated,
@@ -627,7 +568,7 @@ mod tests {
             .unwrap();
 
         let wire_format = build_http11_wire_format(&request);
-        let calculated = ByteBudget::calculate_request_size(&request);
+        let calculated = ChannelBudget::calculate_request_size(&request);
 
         assert_eq!(
             calculated,

@@ -10,7 +10,7 @@
 use super::Prover;
 use crate::config::notary::NotaryConfig;
 use crate::config::ProveConfig;
-use crate::providers::budget::ByteBudget;
+use crate::providers::budget::{ChannelBudget, ChannelCapacity};
 use crate::providers::interaction::single_interaction_round;
 use crate::tlsn::notarise::notarise_session;
 use crate::tlsn::save_proof::save_to_file;
@@ -46,7 +46,7 @@ impl Prover for TlsSingleShotProver {
         .await?;
 
         // 2) Create byte budget from notary config (shared across entire session)
-        let mut budget = ByteBudget::from_notary(&self.notary);
+        let mut budget = ChannelBudget::with_capacity(ChannelCapacity::from_notary(&self.notary));
 
         // 3) Interaction loop
         let mut messages = vec![];

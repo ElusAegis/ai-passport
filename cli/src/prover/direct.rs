@@ -9,7 +9,7 @@
 
 use super::Prover;
 use crate::config::ProveConfig;
-use crate::providers::budget::ByteBudget;
+use crate::providers::budget::ChannelBudget;
 use crate::providers::interaction::single_interaction_round;
 use anyhow::{Context, Result};
 use async_trait::async_trait;
@@ -82,7 +82,7 @@ impl Prover for DirectProver {
         info!(target: "plain", "Model: {}:{}", config.provider.domain, config.provider.port);
 
         // Direct prover uses unlimited budget (no TLS channel constraints)
-        let mut budget = ByteBudget::unlimited();
+        let mut budget = ChannelBudget::unlimited();
         debug!("budget: using unlimited (direct/passthrough mode)");
 
         let mut request_sender = Self::setup_connection(config).await?;

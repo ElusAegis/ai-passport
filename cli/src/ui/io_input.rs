@@ -1,4 +1,4 @@
-use crate::providers::budget::ByteBudget;
+use crate::providers::budget::ChannelBudget;
 use crate::providers::message::ChatMessage;
 use crate::ProveConfig;
 use anyhow::Context;
@@ -12,7 +12,7 @@ use tracing::{debug, info};
 pub trait InputSource: Send + 'static {
     fn next_message(
         &mut self,
-        budget: &ByteBudget,
+        budget: &ChannelBudget,
         config: &ProveConfig,
         past_messages: &[ChatMessage],
     ) -> anyhow::Result<Option<ChatMessage>>;
@@ -34,7 +34,7 @@ where
 
 /// Read user input with budget information displayed in the prompt.
 pub(crate) fn get_new_user_message(
-    budget: &ByteBudget,
+    budget: &ChannelBudget,
     config: &ProveConfig,
     messages: &[ChatMessage],
 ) -> anyhow::Result<Option<ChatMessage>> {
@@ -90,7 +90,7 @@ pub struct StdinInputSource;
 impl InputSource for StdinInputSource {
     fn next_message(
         &mut self,
-        budget: &ByteBudget,
+        budget: &ChannelBudget,
         config: &ProveConfig,
         past_messages: &[ChatMessage],
     ) -> anyhow::Result<Option<ChatMessage>> {
@@ -170,7 +170,7 @@ impl VecInputSource {
 impl InputSource for VecInputSource {
     fn next_message(
         &mut self,
-        _budget: &ByteBudget,
+        _budget: &ChannelBudget,
         _config: &ProveConfig,
         past_messages: &[ChatMessage],
     ) -> anyhow::Result<Option<ChatMessage>> {

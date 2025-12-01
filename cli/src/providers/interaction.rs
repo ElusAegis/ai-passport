@@ -4,7 +4,7 @@
 //! between [`TlsSingleShotProver`] and [`TlsPerMessageProver`].
 
 use crate::config::ProveConfig;
-use crate::providers::budget::ByteBudget;
+use crate::providers::budget::ChannelBudget;
 use crate::providers::message::ChatMessage;
 use crate::providers::Provider;
 use crate::ui::io_input::get_new_user_message;
@@ -34,7 +34,7 @@ pub async fn single_interaction_round(
     config: &ProveConfig,
     messages: &mut Vec<ChatMessage>,
     close_connection: bool,
-    budget: &mut ByteBudget,
+    budget: &mut ChannelBudget,
 ) -> Result<bool> {
     // 1) Read user input (with budget info displayed)
     let Some(user_message) =
@@ -115,7 +115,7 @@ async fn get_response_with_sizes(
         .context("Error reading response body")?
         .to_bytes();
 
-    let total_len = ByteBudget::calculate_response_size(&headers, &payload);
+    let total_len = ChannelBudget::calculate_response_size(&headers, &payload);
 
     let parsed: Value = serde_json::from_slice(&payload).context("Error parsing the response")?;
 
@@ -137,7 +137,7 @@ fn generate_request_with_limit(
     messages: &[ChatMessage],
     config: &ProveConfig,
     close_connection: bool,
-    budget: &ByteBudget,
+    budget: &ChannelBudget,
 ) -> Result<(Request<String>, usize)> {
     // Calculate max_tokens from remaining receive budget
     let max_tokens = if let Some(config_max) = config.max_response_tokens {
@@ -178,7 +178,7 @@ fn generate_request_with_limit(
         .context("Error building the request")?;
 
     // Get total length of the request and check against budget
-    let total_len = ByteBudget::calculate_request_size(&request);
+    let total_len = ChannelBudget::calculate_request_size(&request);
     budget
         .check_request_fits(total_len)
         .context("Request exceeds available budget")?;
