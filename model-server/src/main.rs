@@ -23,6 +23,7 @@ use subtle::ConstantTimeEq;
 use time::OffsetDateTime;
 use tower_http::cors::{Any, CorsLayer};
 use tower_http::trace::TraceLayer;
+use tracing::{debug, info};
 use tracing_subscriber::{fmt, EnvFilter};
 use uuid::Uuid;
 
@@ -40,13 +41,13 @@ struct ModelList {
     data: Vec<Model>,
 }
 
-#[derive(Deserialize, Serialize, Clone)]
+#[derive(Deserialize, Serialize, Clone, Debug)]
 struct ChatMessage {
     role: String,
     content: String,
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, Debug)]
 struct ChatRequest {
     model: String,
     messages: Vec<ChatMessage>,
@@ -170,7 +171,26 @@ async fn chat_completions(
     Json(req): Json<ChatRequest>,
 ) -> (StatusCode, HeaderMap, Json<ChatResponse>) {
     let created = OffsetDateTime::now_utc().unix_timestamp();
+
+    // Get the last user message (what triggered this request)
+    let last_user_msg = req
+        .messages
+        .iter()
+        .rev()
+        .find(|m| m.role == "user")
+        .map(|m| m.content.as_str())
+        .unwrap_or("<none>");
+
+    debug!(
+        model = %req.model,
+        history_len = req.messages.len(),
+        "request: {}",
+        last_user_msg
+    );
+
     let content = fixed_reply(&req);
+
+    debug!("reply: {}", content);
 
     let resp = ChatResponse {
         id: format!("chatcmpl-{}", Uuid::new_v4()),
@@ -227,13 +247,19 @@ async fn require_api_key(
 }
 
 #[tokio::main]
-async fn main() -> anyhow::Result<()> {
-    // RUST_LOG=info ./mini-openai
+async fn main() -> Result<()> {
+    // Default to debug for model_server, info for dependencies
     let env_filter = EnvFilter::try_from_default_env()
-        .unwrap_or_else(|_| EnvFilter::new("info,axum=info,tower_http=info"));
+        .unwrap_or_else(|_| EnvFilter::new("debug,hyper=info,rustls=info,tower_http=info"));
     fmt().with_env_filter(env_filter).with_target(false).init();
 
     let config = Arc::new(Config::from_env()?);
+
+    info!(
+        addr = %config.bind_addr,
+        api_key = config.api_key.is_some(),
+        "starting model server"
+    );
 
     let state = AppState {
         models: Arc::new(fixed_models()),
@@ -263,7 +289,7 @@ async fn main() -> anyhow::Result<()> {
 
     let tls = rustls_config_from_paths(&config.cert_path, &config.key_path).await?;
 
-    println!("Listening on https://{}", config.bind_addr);
+    info!("listening on https://{}", config.bind_addr);
     axum_server::bind_rustls(config.bind_addr, tls)
         .serve(app.into_make_service())
         .await?;

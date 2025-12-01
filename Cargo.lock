@@ -2404,7 +2404,6 @@ dependencies = [
  "axum",
  "axum-server",
  "dotenvy",
- "log",
  "rustls 0.23.31",
  "rustls-pemfile 2.2.0",
  "serde",
@@ -2412,6 +2411,7 @@ dependencies = [
  "time",
  "tokio",
  "tower-http",
+ "tracing",
  "tracing-subscriber",
  "uuid",
 ]
