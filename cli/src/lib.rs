@@ -13,7 +13,9 @@ pub use config::ProveConfig;
 pub use prover::{
     AgentProver, DirectProver, Prover, ProverKind, TlsPerMessageProver, TlsSingleShotProver,
 };
-pub use providers::{budget::ChannelBudget, ApiProvider};
+pub use providers::{
+    budget::ChannelBudget, budget::BYTES_PER_TOKEN, message::ChatMessage, ApiProvider,
+};
 pub use tlsn::{notarise, save_proof, setup};
 pub use tlsn_common::config::NetworkSetting;
 pub use ui::io_input::{with_input_source, InputSource, StdinInputSource, VecInputSource};

@@ -11,7 +11,7 @@ use tracing::{debug, warn};
 
 /// Estimated bytes per token for response size calculation.
 /// Conservative estimate accounting for UTF-8 and JSON escaping.
-const BYTES_PER_TOKEN: usize = 5;
+pub const BYTES_PER_TOKEN: usize = 7;
 
 /// Initial estimate for request overhead (HTTP headers).
 /// Used until we observe real values.
