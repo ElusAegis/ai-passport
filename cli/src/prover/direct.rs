@@ -16,13 +16,14 @@ use async_trait::async_trait;
 use hyper::client::conn::http1::SendRequest;
 use hyper_util::rt::TokioIo;
 use rustls::pki_types::ServerName;
+use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use tokio::net::TcpStream;
 use tokio_rustls::TlsConnector;
 use tracing::{debug, info};
 
 /// Direct passthrough prover - no TLSNotary, no proofs.
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct DirectProver {}
 
 impl DirectProver {

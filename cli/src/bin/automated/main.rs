@@ -16,22 +16,20 @@
 //!
 //! # Output
 //!
-//! Results are saved to `benchmarks/{prover}_{domain}_{model}.jsonl` in JSONL format,
-//! with one JSON object per benchmark run.
+//! Results are saved to `benchmarks/{provider}_{model}_{messages}_{req_bytes}_{resp_bytes}.jsonl`
+//! in JSONL format, with one JSON object per benchmark run. Failed benchmarks are saved
+//! with a `_failed` suffix.
 
 mod input_source;
 mod results;
+mod runner;
 mod stats;
 
-use ai_passport::{
-    with_input_source, AgentProver, ApiProvider, ChannelBudget, ChatMessage, DirectProver,
-    InputSource, ProveConfig, Prover, BYTES_PER_TOKEN,
-};
+use ai_passport::{AgentProver, ApiProvider, DirectProver, ProveConfig, BYTES_PER_TOKEN};
 use anyhow::Context;
 use dotenvy::var;
-use input_source::BenchmarkInputSource;
-use results::{save_record, BenchmarkConfig, BenchmarkRecord};
-use std::sync::{Arc, Mutex};
+use results::BenchmarkConfig;
+use runner::run_benchmark;
 use tracing::info;
 
 #[tokio::main]
@@ -76,14 +74,8 @@ async fn main() -> anyhow::Result<()> {
             .unwrap_or_else(|| "unlimited".to_string())
     );
 
-    // Build the benchmark config for recording
+    // Build the benchmark config (only benchmark-specific fields)
     let benchmark_config = BenchmarkConfig {
-        prover_type: "direct".to_string(),
-        domain: domain.clone(),
-        port,
-        model_id: model_id.clone(),
-        notary_sent_capacity: None,
-        notary_recv_capacity: None,
         target_request_bytes,
         target_response_bytes,
         max_rounds,
@@ -96,7 +88,7 @@ async fn main() -> anyhow::Result<()> {
         .build()
         .context("Failed to build ApiProvider")?;
 
-    let config = ProveConfig::builder()
+    let prove_config = ProveConfig::builder()
         .provider(api_provider)
         .model_id(model_id)
         .max_response_tokens(target_response_bytes / BYTES_PER_TOKEN as u32)
@@ -105,57 +97,7 @@ async fn main() -> anyhow::Result<()> {
 
     let prover = AgentProver::Direct(DirectProver {});
 
-    // Create input source wrapped in Arc<Mutex> so we can access stats after the run
-    let input_source = Arc::new(Mutex::new(BenchmarkInputSource::new(
-        target_request_bytes,
-        target_response_bytes,
-        max_rounds,
-    )));
+    run_benchmark(benchmark_config, prove_config, prover).await?;
 
-    // Initialize stats timer before starting the prover (to measure setup time)
-    {
-        let mut source = input_source.lock().expect("Failed to lock input source");
-        source.init_stats();
-    }
-
-    // Run the benchmark
-    let input_source_clone = Arc::clone(&input_source);
-    let result =
-        with_input_source(InputSourceWrapper(input_source_clone), prover.run(&config)).await;
-
-    // Extract stats and save results
-    let stats = {
-        let source = input_source.lock().expect("Failed to lock input source");
-        source.stats().clone()
-    };
-
-    // Print summary to console
-    stats.print_summary();
-
-    // Save results to file
-    let record = match &result {
-        Ok(()) => BenchmarkRecord::from_stats(benchmark_config, &stats),
-        Err(e) => BenchmarkRecord::failed(benchmark_config, &stats, e.to_string()),
-    };
-
-    save_record(&record)?;
-
-    result
-}
-
-/// Wrapper to implement InputSource for Arc<Mutex<BenchmarkInputSource>>.
-struct InputSourceWrapper(Arc<Mutex<BenchmarkInputSource>>);
-
-impl InputSource for InputSourceWrapper {
-    fn next_message(
-        &mut self,
-        budget: &ChannelBudget,
-        config: &ProveConfig,
-        past_messages: &[ChatMessage],
-    ) -> anyhow::Result<Option<ChatMessage>> {
-        self.0
-            .lock()
-            .unwrap()
-            .next_message(budget, config, past_messages)
-    }
+    Ok(())
 }

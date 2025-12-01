@@ -9,7 +9,7 @@ pub enum NotaryMode {
     RemoteTLS,
 }
 
-#[derive(Builder, Clone, Debug)]
+#[derive(Builder, Clone, Debug, Serialize, Deserialize)]
 #[builder(pattern = "owned")]
 pub struct NotaryConfig {
     /// The domain of the notary server

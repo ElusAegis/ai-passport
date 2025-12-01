@@ -19,6 +19,7 @@ use crate::ui::user_messages::display_proofs;
 use anyhow::{Context, Result};
 use async_trait::async_trait;
 use hyper::client::conn::http1::SendRequest;
+use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 use tlsn_prover::{state, Prover as TlsnProver, ProverError};
 use tokio::task::JoinHandle;
@@ -30,7 +31,7 @@ type ProverWithRequestSender = (
 );
 
 /// Configuration for TLS Per-Message proving.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TlsPerMessageProver {
     /// Notary configuration (server, budgets, etc.)
     pub notary: NotaryConfig,

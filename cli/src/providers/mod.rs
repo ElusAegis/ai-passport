@@ -18,6 +18,7 @@ pub use message::ChatMessage;
 pub use mistral::Mistral;
 pub use redpill::Redpill;
 use serde_json::{json, Value};
+use strum::IntoStaticStr;
 use tracing::info;
 pub use unknown::Unknown;
 
@@ -121,6 +122,11 @@ impl ApiProvider {
     pub fn models_headers(&self) -> Vec<(&'static str, String)> {
         self.models_headers_with_key(&self.api_key)
     }
+
+    /// Get the provider name (e.g., "anthropic", "fireworks", "unknown").
+    pub fn provider_name(&self) -> &'static str {
+        (&self.provider).into()
+    }
 }
 
 impl ApiProviderBuilder {
@@ -134,7 +140,8 @@ impl ApiProviderBuilder {
 }
 
 #[enum_dispatch(Provider)]
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, IntoStaticStr)]
+#[strum(serialize_all = "snake_case")]
 enum ApiProviderInner {
     Unknown,
     Anthropic,

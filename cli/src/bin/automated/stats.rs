@@ -1,7 +1,6 @@
 //! Benchmark statistics collection and analysis.
 
 use std::time::{Duration, Instant};
-use tracing::info;
 
 /// Setup timing state.
 #[derive(Debug, Clone)]
@@ -111,19 +110,5 @@ impl BenchmarkStats {
     /// Get request sizes.
     pub fn request_sizes(&self) -> &[usize] {
         &self.request_sizes
-    }
-
-    /// Print a brief summary of the benchmark run.
-    pub fn print_summary(&self) {
-        info!("────────────────────────────────────────");
-        info!("Benchmark complete:");
-        if let Some(setup) = self.setup_duration() {
-            info!("  Setup time: {:.2}s", setup.as_secs_f64());
-        }
-        info!("  Rounds: {}", self.round_durations.len());
-        if let Some(total) = self.total_duration() {
-            info!("  Total time: {:.2}s", total.as_secs_f64());
-        }
-        info!("────────────────────────────────────────");
     }
 }

@@ -19,10 +19,11 @@ use crate::ui::spinner::with_spinner_future;
 use crate::ui::user_messages::display_proofs;
 use anyhow::{Context, Result};
 use async_trait::async_trait;
+use serde::{Deserialize, Serialize};
 use tracing::debug;
 
 /// Configuration for TLS Single-Shot proving.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TlsSingleShotProver {
     /// Notary configuration (server, budgets, etc.)
     pub notary: NotaryConfig,

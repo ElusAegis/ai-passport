@@ -16,6 +16,7 @@ use crate::config::ProveConfig;
 use anyhow::Context;
 use anyhow::Result;
 use async_trait::async_trait;
+use strum::IntoStaticStr;
 
 /// Trait for all prover implementations.
 ///
@@ -45,7 +46,8 @@ pub enum ProverKind {
 ///
 /// This allows runtime selection of prover type while keeping static dispatch
 /// within each variant.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, IntoStaticStr, serde::Serialize, serde::Deserialize)]
+#[strum(serialize_all = "snake_case")]
 pub enum AgentProver {
     Direct(DirectProver),
     TlsSingleShot(TlsSingleShotProver),
