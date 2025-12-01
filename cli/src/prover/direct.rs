@@ -10,8 +10,15 @@
 use super::Prover;
 use crate::config::ProveConfig;
 use crate::providers::budget::ByteBudget;
-use anyhow::Result;
+use crate::providers::interaction::single_interaction_round;
+use anyhow::{Context, Result};
 use async_trait::async_trait;
+use hyper::client::conn::http1::SendRequest;
+use hyper_util::rt::TokioIo;
+use rustls::pki_types::ServerName;
+use std::sync::Arc;
+use tokio::net::TcpStream;
+use tokio_rustls::TlsConnector;
 use tracing::{debug, info};
 
 /// Direct passthrough prover - no TLSNotary, no proofs.
@@ -23,6 +30,49 @@ impl DirectProver {
     pub fn new() -> Self {
         Self {}
     }
+
+    async fn setup_connection(config: &ProveConfig) -> Result<SendRequest<String>> {
+        // Set up TLS configuration with native root certificates
+        let mut root_store = rustls::RootCertStore::empty();
+        root_store.extend(webpki_roots::TLS_SERVER_ROOTS.iter().cloned());
+
+        let tls_config = rustls::ClientConfig::builder()
+            .with_root_certificates(root_store)
+            .with_no_client_auth();
+
+        let connector = TlsConnector::from(Arc::new(tls_config));
+
+        // Connect to the server
+        let domain = &config.provider.domain;
+        let port = config.provider.port;
+
+        let tcp_stream = TcpStream::connect((domain.as_str(), port))
+            .await
+            .context("Failed to connect to server")?;
+
+        let server_name = ServerName::try_from(domain.clone()).context("Invalid server name")?;
+
+        let tls_stream = connector
+            .connect(server_name, tcp_stream)
+            .await
+            .context("TLS handshake failed")?;
+
+        // Wrap with hyper's TokioIo adapter
+        let io = TokioIo::new(tls_stream);
+
+        // Create HTTP/1.1 connection
+        let (request_sender, connection) = hyper::client::conn::http1::handshake(io)
+            .await
+            .context("HTTP handshake failed")?;
+
+        // Spawn the connection task
+        tokio::spawn(async move {
+            if let Err(e) = connection.await {
+                debug!("HTTP connection error: {}", e);
+            }
+        });
+        Ok(request_sender)
+    }
 }
 
 #[async_trait]
@@ -32,17 +82,31 @@ impl Prover for DirectProver {
         info!(target: "plain", "Model: {}:{}", config.provider.domain, config.provider.port);
 
         // Direct prover uses unlimited budget (no TLS channel constraints)
-        let _budget = ByteBudget::unlimited();
+        let mut budget = ByteBudget::unlimited();
         debug!("budget: using unlimited (direct/passthrough mode)");
 
-        // TODO: Implement direct HTTP interaction without TLSNotary
-        // This would use a standard HTTP client (reqwest or hyper directly)
-        // to make requests to the model API, passing &mut budget to
-        // single_interaction_round.
-        //
-        // For now, this is a stub that returns an empty outcome.
+        let mut request_sender = Self::setup_connection(config).await?;
 
-        info!(target: "plain", "DirectProver: Not yet implemented - returning empty outcome");
+        // Interaction loop
+        let mut messages = vec![];
+
+        loop {
+            // Direct mode uses keep-alive (close_connection = false)
+            let was_stopped = single_interaction_round(
+                &mut request_sender,
+                config,
+                &mut messages,
+                false,
+                &mut budget,
+            )
+            .await?;
+
+            if was_stopped {
+                break;
+            }
+        }
+
+        info!(target: "plain", "DirectProver: Session complete (no proofs generated)");
 
         Ok(())
     }

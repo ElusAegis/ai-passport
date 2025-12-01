@@ -135,6 +135,7 @@ dependencies = [
  "k256",
  "notary-client",
  "rand 0.9.1",
+ "rustls 0.23.31",
  "serde",
  "serde_json",
  "spansy",
@@ -144,9 +145,11 @@ dependencies = [
  "tlsn-prover",
  "tlsn-verifier",
  "tokio",
+ "tokio-rustls 0.26.2",
  "tokio-util",
  "tracing",
  "tracing-subscriber",
+ "webpki-roots 0.26.11",
 ]
 
 [[package]]
@@ -2401,6 +2404,7 @@ dependencies = [
  "axum",
  "axum-server",
  "dotenvy",
+ "log",
  "rustls 0.23.31",
  "rustls-pemfile 2.2.0",
  "serde",
