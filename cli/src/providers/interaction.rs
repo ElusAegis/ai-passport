@@ -9,6 +9,7 @@ use crate::providers::message::ChatMessage;
 use crate::providers::Provider;
 use crate::ui::io_input::get_new_user_message;
 use crate::ui::spinner::with_spinner_future;
+use crate::BYTES_PER_TOKEN;
 use anyhow::{Context, Result};
 use http_body_util::BodyExt;
 use hyper::client::conn::http1::SendRequest;
@@ -140,11 +141,12 @@ fn generate_request_with_limit(
     budget: &ChannelBudget,
 ) -> Result<(Request<String>, usize)> {
     // Calculate max_tokens from remaining receive budget
-    let max_tokens = if let Some(config_max) = config.max_response_tokens {
+    let max_tokens = if let Some(config_max) = config.max_response_bytes {
         Some(config_max)
     } else {
-        budget.max_tokens_for_response()
-    };
+        budget.max_bytes_left_for_response()
+    }
+    .map(|bytes| bytes / BYTES_PER_TOKEN);
 
     debug!("budget: max_tokens for response = {:?}", max_tokens);
 

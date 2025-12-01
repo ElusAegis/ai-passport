@@ -14,7 +14,7 @@ use tracing::info;
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct BenchmarkConfig {
     /// Target request size in bytes.
-    pub target_request_bytes: usize,
+    pub target_request_bytes: u32,
     /// Target response size in bytes.
     pub target_response_bytes: u32,
     /// Maximum rounds configured (None = unlimited).

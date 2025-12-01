@@ -3,6 +3,7 @@
 //! Each prover type holds its own configuration and implements the [`Prover`] trait.
 //! The shared interaction logic lives in [`crate::providers::interaction`] and is used by TLS provers.
 
+pub(super) mod capacity;
 mod direct;
 mod tls_per_message;
 mod tls_single_shot;

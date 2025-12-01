@@ -10,12 +10,14 @@
 use super::Prover;
 use crate::config::notary::NotaryConfig;
 use crate::config::ProveConfig;
+use crate::prover::capacity::estimate_round_capacity;
 use crate::providers::budget::{ChannelBudget, ChannelCapacity};
 use crate::providers::interaction::single_interaction_round;
 use crate::tlsn::notarise::notarise_session;
 use crate::tlsn::save_proof::save_to_file;
 use crate::tlsn::setup::setup;
 use crate::ui::user_messages::display_proofs;
+use crate::ChatMessage;
 use anyhow::{Context, Result};
 use async_trait::async_trait;
 use hyper::client::conn::http1::SendRequest;
@@ -29,6 +31,9 @@ type ProverWithRequestSender = (
     JoinHandle<Result<TlsnProver<state::Committed>, ProverError>>,
     SendRequest<String>,
 );
+
+// Type alias: the async block returns (Result<ProverWithRequestSender>, NotaryConfig)
+type SetupResult = (Result<ProverWithRequestSender>, NotaryConfig);
 
 /// Configuration for TLS Per-Message proving.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -50,32 +55,37 @@ impl Prover for TlsPerMessageProver {
         let domain = &config.provider.domain;
         let port = config.provider.port;
 
+        // Budget tracks overhead observations across rounds
         let mut budget = ChannelBudget::with_capacity(ChannelCapacity::from_notary(&self.notary));
 
-        let spawn_setup = |notary_config: NotaryConfig| {
+        // Helper to spawn a notary setup for a given lookahead
+        let spawn_setup = |messages: &[ChatMessage], budget: &ChannelBudget, lookahead| {
             let domain = domain.clone();
-            tokio::spawn(async move { setup(&notary_config, &domain, port).await })
+            let notary_config =
+                estimate_round_capacity(&self.notary, config, messages, budget, lookahead);
+            tokio::spawn(async move { (setup(&notary_config, &domain, port).await, notary_config) })
         };
 
         let mut stored_proofs = Vec::<PathBuf>::new();
         let mut all_messages = vec![];
 
         // Set up the current instance of the prover
-        let mut current_instance_handle: JoinHandle<Result<ProverWithRequestSender>> =
-            spawn_setup(self.notary.clone());
+        let mut current_instance_handle: JoinHandle<SetupResult> =
+            spawn_setup(&all_messages, &budget, 1);
 
-        // Pre-warm the next instance
-        let mut future_instance_handle: Option<JoinHandle<Result<ProverWithRequestSender>>> =
-            Some(spawn_setup(self.notary.clone()));
+        // Pre-warm the next instance with capacity for second round (lookahead=2)
+        let mut future_instance_handle: JoinHandle<SetupResult> =
+            spawn_setup(&all_messages, &budget, 2);
 
         let mut counter = 0;
         loop {
             // Wait for the current instance to be ready
-            let mut current_instance = current_instance_handle.await??;
+            let (prover_result, notary_config) = current_instance_handle.await?;
+            let mut current_instance = prover_result?;
 
             budget
                 .reset()
-                .set_capacity(ChannelCapacity::from_notary(&self.notary));
+                .set_capacity(ChannelCapacity::from_notary(&notary_config));
 
             // Per-message uses close connection (close_connection = true)
             let stop = single_interaction_round(
@@ -105,13 +115,11 @@ impl Prover for TlsPerMessageProver {
                 &secrets,
             )?);
 
-            // Prepare for the next iteration
-            current_instance_handle = future_instance_handle
-                .take()
-                .context("Future notarization instance does not exist")?;
+            // Prepare for the next iteration - use the pre-warmed instance
+            current_instance_handle = future_instance_handle;
 
-            // Pre-warm the next instance
-            future_instance_handle = Some(spawn_setup(self.notary.clone()));
+            // Pre-warm the next instance with updated capacity estimate
+            future_instance_handle = spawn_setup(&all_messages, &budget, 2);
             counter += 1;
         }
 

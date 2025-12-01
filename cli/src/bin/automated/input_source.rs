@@ -10,7 +10,7 @@ use tracing::{debug, info, warn};
 /// with more words than the token limit allows (ensuring max_tokens is used).
 pub struct BenchmarkInputSource {
     /// Target size in bytes for each user message content.
-    target_request_bytes: usize,
+    target_request_bytes: u32,
     /// Target response size in bytes for each assistant message.
     target_response_bytes: u32,
     /// Maximum number of rounds (safety limit). None = unlimited.
@@ -29,7 +29,7 @@ impl BenchmarkInputSource {
     /// * `target_response_bytes` - Target size for each assistant message in bytes
     /// * `max_rounds` - Optional safety limit on number of messages
     pub fn new(
-        target_request_bytes: usize,
+        target_request_bytes: u32,
         target_response_bytes: u32,
         max_rounds: Option<usize>,
     ) -> Self {
@@ -56,7 +56,7 @@ impl BenchmarkInputSource {
     fn generate_message(&self) -> String {
         // Request more words than token limit allows to ensure model uses full budget.
         // Tokens ≈ words * 1.3 for English, so we ask for ~2x the token count in words.
-        let words_to_request = (self.target_response_bytes as usize / BYTES_PER_TOKEN) * 2;
+        let words_to_request = (self.target_response_bytes / BYTES_PER_TOKEN) * 2;
 
         // Core instruction that the model should follow
         let instruction = format!(
@@ -70,7 +70,7 @@ impl BenchmarkInputSource {
         let separator = "\n\n--- PADDING BELOW (ignore, used for message size calibration) ---\n\n";
 
         let prefix = format!("{}{}", instruction, separator);
-        let prefix_len = prefix.len();
+        let prefix_len = prefix.len() as u32;
 
         // Calculate padding needed to reach target size
         let padding_needed = self.target_request_bytes.saturating_sub(prefix_len);
@@ -84,7 +84,7 @@ impl BenchmarkInputSource {
         }
 
         // Generate padding to reach exact target size
-        let padding = Self::generate_padding(padding_needed);
+        let padding = Self::generate_padding(padding_needed as usize);
 
         format!("{}{}", prefix, padding)
     }
@@ -152,7 +152,7 @@ impl BenchmarkInputSource {
 
         // Check if we have enough send budget for another message
         if let Some(available_send) = budget.available_input_bytes(past_messages) {
-            if available_send < self.target_request_bytes {
+            if available_send < self.target_request_bytes as usize {
                 debug!(
                     "Send budget exhausted: {} available, {} needed",
                     available_send, self.target_request_bytes

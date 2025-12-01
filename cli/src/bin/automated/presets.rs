@@ -59,16 +59,16 @@ pub const NOTARY_LOCAL: NotaryPreset = NotaryPreset {
     max_recv_bytes: 16 * KIB,
 };
 
-// /// PSE notary preset (notary.pse.dev:443, TLS).
-// pub const NOTARY_PSE: NotaryPreset = NotaryPreset {
-//     name: "notary-pse",
-//     domain: "notary.pse.dev",
-//     port: 443,
-//     path_prefix: "v0.1.0-alpha.12",
-//     mode: NotaryMode::RemoteTLS,
-//     max_sent_bytes: 4 * KIB,
-//     max_recv_bytes: 16 * KIB,
-// };
+/// PSE notary preset (notary.pse.dev:443, TLS).
+pub const NOTARY_PSE: NotaryPreset = NotaryPreset {
+    name: "notary-pse",
+    domain: "notary.pse.dev",
+    port: 443,
+    path_prefix: "v0.1.0-alpha.12",
+    mode: NotaryMode::RemoteTLS,
+    max_sent_bytes: 4 * KIB,
+    max_recv_bytes: 16 * KIB,
+};
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Prover Presets
@@ -90,10 +90,7 @@ impl ProverPreset {
 
     /// Whether this prover requires a notary.
     pub fn requires_notary(&self) -> bool {
-        match self.name {
-            "direct" => false,
-            _ => true,
-        }
+        !matches!(self.name, "direct")
     }
 }
 
@@ -128,5 +125,5 @@ pub fn all_prover_presets() -> Vec<&'static ProverPreset> {
 
 /// Get all available notary presets.
 pub fn all_notary_presets() -> Vec<&'static NotaryPreset> {
-    vec![&NOTARY_LOCAL]
+    vec![&NOTARY_LOCAL, &NOTARY_PSE]
 }

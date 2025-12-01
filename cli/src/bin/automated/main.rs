@@ -26,7 +26,7 @@ mod results;
 mod runner;
 mod stats;
 
-use ai_passport::{ApiProvider, ProveConfig, BYTES_PER_TOKEN};
+use ai_passport::{ApiProvider, ProveConfig};
 use anyhow::Context;
 use dotenvy::var;
 use presets::{all_notary_presets, all_prover_presets};
@@ -51,9 +51,8 @@ async fn main() -> anyhow::Result<()> {
         .unwrap_or(Ok(443))?;
 
     let target_request_bytes = var("BENCHMARK_REQUEST_BYTES")
-        .map(|b| b.parse::<usize>())
+        .map(|t| t.parse::<u32>())
         .unwrap_or(Ok(500))?;
-
     let target_response_bytes = var("BENCHMARK_RESPONSE_BYTES")
         .map(|t| t.parse::<u32>())
         .unwrap_or(Ok(500))?;
@@ -61,20 +60,23 @@ async fn main() -> anyhow::Result<()> {
     let max_rounds = var("BENCHMARK_MAX_ROUNDS")
         .ok()
         .map(|r| r.parse::<usize>())
-        .transpose()?
-        .or(Some(5));
+        .unwrap_or(Ok(10))?;
+
+    let notary_max_recv_overwrite = var("NOTARY_MAX_RECV_OVERWRITE")
+        .map(|v| v.parse::<usize>().ok())
+        .ok()
+        .flatten();
+    let notary_max_send_overwrite = var("NOTARY_MAX_SEND_OVERWRITE")
+        .map(|v| v.parse::<usize>().ok())
+        .ok()
+        .flatten();
 
     info!("Benchmark configuration:");
     info!("  Domain: {}:{}", domain, port);
     info!("  Model: {}", model_id);
     info!("  Target request size: {} bytes", target_request_bytes);
     info!("  Target response size: {} bytes", target_response_bytes);
-    info!(
-        "  Max rounds: {}",
-        max_rounds
-            .map(|r| r.to_string())
-            .unwrap_or_else(|| "unlimited".to_string())
-    );
+    info!("  Max rounds: {}", max_rounds);
 
     // Build the API provider (shared across all provers)
     let api_provider = ApiProvider::builder()
@@ -97,14 +99,15 @@ async fn main() -> anyhow::Result<()> {
     let prove_config = ProveConfig::builder()
         .provider(api_provider.clone())
         .model_id(&model_id)
-        .max_response_tokens(target_response_bytes / BYTES_PER_TOKEN as u32)
+        .max_request_bytes(target_request_bytes)
+        .max_response_bytes(target_response_bytes)
         .build()
         .context("Failed to build ProveConfig")?;
 
     let benchmark_config = BenchmarkConfig {
         target_request_bytes,
         target_response_bytes,
-        max_rounds,
+        max_rounds: Some(max_rounds),
     };
 
     // Track results
@@ -126,7 +129,15 @@ async fn main() -> anyhow::Result<()> {
                 }
             );
 
-            let prover = prover_preset.build(notary_preset);
+            let mut notary_preset = (*notary_preset).clone();
+            if let Some(overwrite) = notary_max_recv_overwrite {
+                notary_preset.max_recv_bytes = overwrite;
+            }
+            if let Some(overwrite) = notary_max_send_overwrite {
+                notary_preset.max_sent_bytes = overwrite;
+            }
+
+            let prover = prover_preset.build(&notary_preset);
 
             match run_benchmark(&benchmark_config, &prove_config, prover).await {
                 Ok(path) => {

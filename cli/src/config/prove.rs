@@ -17,9 +17,12 @@ pub struct ProveConfig {
     /// The ID of the model
     #[builder(setter(into))]
     pub model_id: String,
-    /// Max tokens for the model response
+    /// Max bytes for the model response
     #[builder(setter(into), default)]
-    pub max_response_tokens: Option<u32>,
+    pub max_response_bytes: Option<u32>,
+    /// Max bytes for the model request
+    #[builder(setter(into), default)]
+    pub max_request_bytes: Option<u32>,
 }
 
 impl ProveConfigBuilder {}

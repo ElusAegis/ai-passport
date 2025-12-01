@@ -11,14 +11,16 @@ use tracing::{debug, warn};
 
 /// Estimated bytes per token for response size calculation.
 /// Conservative estimate accounting for UTF-8 and JSON escaping.
-pub const BYTES_PER_TOKEN: usize = 7;
+pub const BYTES_PER_TOKEN: u32 = 7;
 
 /// Initial estimate for request overhead (HTTP headers).
 /// Used until we observe real values.
+/// This is the largest observed overhead for requests with typical headers.
 const REQUEST_OVERHEAD_ESTIMATE: usize = 285;
 
 /// Initial estimate for response overhead (JSON structure + HTTP headers).
 /// Used until we observe real values.
+/// This is the largest observed overhead for typical chat completions.
 const RESPONSE_OVERHEAD_ESTIMATE: usize = 5000;
 
 /// Shared state for observed overhead values.
@@ -221,16 +223,15 @@ impl ChannelBudget {
     /// Uses observed response overhead if available, otherwise falls back to estimate.
     /// Returns `None` for unlimited budgets, meaning no limit should be set.
     /// Returns `Some(tokens)` for limited budgets.
-    pub fn max_tokens_for_response(&self) -> Option<u32> {
+    pub fn max_bytes_left_for_response(&self) -> Option<u32> {
         match self.capacity {
             ChannelCapacity::Unlimited => None,
             ChannelCapacity::Limited { recv_capacity, .. } => {
                 let response_overhead = self.overhead.response_overhead();
                 let recv_remaining = recv_capacity.saturating_sub(self.recv);
                 let usable = recv_remaining.saturating_sub(response_overhead);
-                let tokens = (usable / BYTES_PER_TOKEN) as u32;
                 // Ensure at least some tokens if there's any budget
-                Some(tokens.max(1))
+                Some(usable.max(1) as u32)
             }
         }
     }
@@ -274,6 +275,16 @@ impl ChannelBudget {
     /// Check if this is an unlimited budget.
     pub fn is_unlimited(&self) -> bool {
         matches!(self.capacity, ChannelCapacity::Unlimited)
+    }
+
+    /// Get the current request overhead estimate (observed or default).
+    pub fn request_overhead(&self) -> usize {
+        self.overhead.request_overhead()
+    }
+
+    /// Get the current response overhead estimate (observed or default).
+    pub fn response_overhead(&self) -> usize {
+        self.overhead.response_overhead()
     }
 
     /// Calculate the actual HTTP/1.1 response size on the wire.
@@ -350,7 +361,7 @@ mod tests {
         let request = make_test_request("test body");
         let request_size = ChannelBudget::calculate_request_size(&request);
         assert!(budget.check_request_fits(request_size).is_ok());
-        assert!(budget.max_tokens_for_response().is_none());
+        assert!(budget.max_bytes_left_for_response().is_none());
         assert!(budget.available_input_bytes(&[]).is_none());
     }
 
@@ -385,7 +396,7 @@ mod tests {
     fn test_max_tokens_calculation() {
         let budget = make_limited_budget(1000, 10000);
 
-        let tokens = budget.max_tokens_for_response().unwrap();
+        let tokens = budget.max_bytes_left_for_response().unwrap();
         // recv_capacity=10000, recv=0, overhead_estimate=5000
         // usable = 10000 - 5000 = 5000
         // tokens = 5000 / 5 = 1000
@@ -419,7 +430,7 @@ mod tests {
         // available_input = 1000 - 285 (estimate) = 715
         assert_eq!(budget.available_input_bytes(&[]).unwrap(), 715);
         // max_tokens = (10000 - 5000) / 5 = 1000
-        assert_eq!(budget.max_tokens_for_response().unwrap(), 1000);
+        assert_eq!(budget.max_bytes_left_for_response().unwrap(), 1000);
 
         // Record sends/recvs which update overhead
         budget.record_sent(300, 100); // overhead = 200
@@ -432,7 +443,7 @@ mod tests {
 
         // recv_remaining = 10000 - 400 = 9600
         // max_tokens = (9600 - 200) / 5 = 1880
-        assert_eq!(budget.max_tokens_for_response().unwrap(), 1880);
+        assert_eq!(budget.max_bytes_left_for_response().unwrap(), 1880);
     }
 
     #[test]
