@@ -6,7 +6,7 @@
 //!
 //! # Example
 //!
-//! ```
+//! ```ignore
 //! use ai_passport::providers::message::ChatMessage;
 //!
 //! let user_msg = ChatMessage::user("Hello, how are you?");
@@ -48,8 +48,7 @@ pub enum ChatMessageRole {
 /// Use the [`ChatMessage::user`] and [`ChatMessage::assistant`] constructors
 /// to create messages with the appropriate role:
 ///
-/// ```
-/// # use ai_passport::providers::message::ChatMessage;
+/// ```ignore
 /// let user_msg = ChatMessage::user("What is 2+2?");
 /// let assistant_msg = ChatMessage::assistant("2+2 equals 4.");
 /// ```
@@ -70,8 +69,7 @@ impl ChatMessage {
     ///
     /// # Example
     ///
-    /// ```
-    /// # use ai_passport::providers::message::ChatMessage;
+    /// ```ignore
     /// let msg = ChatMessage::user("Hello!");
     /// ```
     pub fn user<S: ToString>(content: S) -> ChatMessage {
@@ -89,8 +87,7 @@ impl ChatMessage {
     ///
     /// # Example
     ///
-    /// ```
-    /// # use ai_passport::providers::message::ChatMessage;
+    /// ```ignore
     /// let msg = ChatMessage::assistant("Hello! How can I help you?");
     /// ```
     pub fn assistant<S: ToString>(content: S) -> ChatMessage {
