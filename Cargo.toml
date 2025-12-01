@@ -16,6 +16,7 @@ anyhow = "1"
 derive_builder = "0.20.2"
 hex = "0.4.3"
 dotenvy = "0.15.7"
+regex = "1"
 strum = { version = "0.26", features = ["derive"] }
 
 # --- CLI & UX ---
