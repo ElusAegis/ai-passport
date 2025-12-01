@@ -139,8 +139,12 @@ fn generate_request_with_limit(
     close_connection: bool,
     budget: &ByteBudget,
 ) -> Result<(Request<String>, usize)> {
-    // 3) Calculate max_tokens from remaining receive budget
-    let max_tokens = budget.max_tokens_for_response();
+    // Calculate max_tokens from remaining receive budget
+    let max_tokens = if let Some(config_max) = config.max_response_tokens {
+        Some(config_max)
+    } else {
+        budget.max_tokens_for_response()
+    };
 
     debug!("budget: max_tokens for response = {:?}", max_tokens);
 
