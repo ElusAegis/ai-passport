@@ -26,3 +26,4 @@ serde = { workspace = true }
 # --- Tracing & logging ---
 tracing = { workspace = true }
 tracing-subscriber = { workspace = true }
+rand = "0.10.0-rc.5"

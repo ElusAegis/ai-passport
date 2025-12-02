@@ -47,6 +47,17 @@ pub async fn chat_completions(
         &last_user_msg[..last_user_msg.len().min(70)]
     );
 
+    // Simulate processing time based on model
+    let sleep_duration_ms = match req.model.as_str() {
+        "demo-gpt-4.5" => 2000,
+        "demo-gpt-4o-mini" => 1000,
+        "demo-gpt-3.5-turbo" => 700,
+        _ => 10,
+    };
+
+    let sleep_duration = sleep_duration_ms + (rand::random::<u64>() % (sleep_duration_ms / 2));
+    tokio::time::sleep(std::time::Duration::from_millis(sleep_duration)).await;
+
     // Generate response based on word count request or use fixed reply
     let content = if let Some(word_count) = extract_word_count(last_user_msg) {
         debug!(

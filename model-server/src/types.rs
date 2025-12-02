@@ -80,5 +80,11 @@ pub fn demo_models() -> Vec<Model> {
             created: now,
             owned_by: "demo",
         },
+        Model {
+            id: "demo-gpt4.5".into(),
+            object: "model",
+            created: now,
+            owned_by: "demo",
+        },
     ]
 }
