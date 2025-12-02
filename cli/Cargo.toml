@@ -71,6 +71,6 @@ ephemeral-notary = []
 name = "cli"
 path = "src/bin/cli.rs"
 
-[[bench]]
-name = "prove_bench"
-harness = false
+[[bin]]
+name = "automated-benchmarks"
+path = "src/bin/automated/main.rs"
