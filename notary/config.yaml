@@ -25,8 +25,8 @@ html_info: |
 concurrency: 32
 
 notarization:
-  max_sent_data: 16384
-  max_recv_data: 16384
+  max_sent_data: 65536
+  max_recv_data: 65536
   timeout: 1800
   private_key_path: "notary/notary.key"
   signature_algorithm: secp256k1
