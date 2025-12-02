@@ -33,7 +33,7 @@ notarization:
   allow_extensions: false
 
 tls:
-  enabled: false
+  enabled: true
   private_key_path: "tls/key.pem"
   certificate_path: "tls/cert.pem"
 
