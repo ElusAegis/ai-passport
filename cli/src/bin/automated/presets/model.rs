@@ -104,6 +104,22 @@ const MODEL_ANTHROPIC_HAIKU: StaticModelPreset = StaticModelPreset::new(
     "claude-haiku-4-5-20251001",
 );
 
+const MODEL_ANTHROPIC_SONNET: StaticModelPreset = StaticModelPreset::new(
+    "anthropic-sonnet",
+    "ANTHROPIC_API_KEY",
+    "api.anthropic.com",
+    443,
+    "claude-sonnet-4-5-20250929",
+);
+
+const MODEL_ANTHROPIC_OPUS: StaticModelPreset = StaticModelPreset::new(
+    "anthropic-opus",
+    "ANTHROPIC_API_KEY",
+    "api.anthropic.com",
+    443,
+    "claude-opus-4-5-20251101",
+);
+
 // Phala (Red Pill) presets
 const MODEL_PHALA_HAIKU: StaticModelPreset = StaticModelPreset::new(
     "phala-haiku",
@@ -118,6 +134,8 @@ const STATIC_MODEL_PRESETS: &[StaticModelPreset] = &[
     MODEL_CUSTOM_INSTANT,
     MODEL_CUSTOM_DEMO_GPT4O_MINI,
     MODEL_ANTHROPIC_HAIKU,
+    MODEL_ANTHROPIC_SONNET,
+    MODEL_ANTHROPIC_OPUS,
     MODEL_PHALA_HAIKU,
 ];
 

@@ -14,6 +14,8 @@
 //!   - `custom-instant`: Custom API with "instant" model
 //!   - `custom-demo-gpt-4o-mini`: Custom API with "demo-gpt-4o-mini" model
 //!   - `anthropic-haiku`: Anthropic API with Claude Haiku 4.5
+//!   - `anthropic-sonnet`: Anthropic API with Claude Sonnet 4.5
+//!   - `anthropic-opus`: Anthropic API with Claude Opus 4.5
 //!   - `phala-haiku`: Phala Red Pill API with Claude Haiku 4.5
 //!
 //! ### Option 2: Manual configuration
