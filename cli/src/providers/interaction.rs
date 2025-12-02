@@ -43,10 +43,12 @@ pub async fn single_interaction_round(
     else {
         return Ok(true);
     };
-    let user_message_len = user_message.content().len();
 
     // 2) Add user message to history
     messages.push(user_message);
+    let user_messages_len: usize = serde_json::to_string(&messages)
+        .expect("Failed to serialize messages to calculate their size")
+        .len();
 
     // 4) Build request with budget-aware max_tokens
     let (request, request_total_len) =
@@ -63,10 +65,12 @@ pub async fn single_interaction_round(
             get_response_with_sizes(request_sender, request, config),
         )
         .await?;
-    let assistant_message_len = received_assistant_message.content().len();
+    let assistant_message_len = serde_json::to_string(&received_assistant_message)
+        .expect("Failed to serialize assistant message to calculate its size")
+        .len();
 
     // 8) Record sent and received bytes with content size (updates overhead tracking)
-    budget.record_sent(request_total_len, user_message_len);
+    budget.record_sent(request_total_len, user_messages_len);
     budget.record_recv(response_total_len, assistant_message_len);
 
     // 10) Add assistant message to history

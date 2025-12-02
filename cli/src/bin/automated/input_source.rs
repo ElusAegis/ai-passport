@@ -80,7 +80,11 @@ impl BenchmarkInputSource {
                 "Generated message size {prefix_len} already exceeds target size of {} bytes",
                 self.target_request_bytes
             );
-            return instruction;
+            let trimmed = prefix
+                .chars()
+                .take(self.target_request_bytes as usize)
+                .collect();
+            return trimmed;
         }
 
         // Generate padding to reach exact target size
@@ -136,28 +140,20 @@ impl BenchmarkInputSource {
     }
 
     /// Check if we should continue generating based on budget.
-    fn should_continue(&self, budget: &ChannelBudget, past_messages: &[ChatMessage]) -> bool {
-        // Check max rounds limit
-        if let Some(max) = self.max_rounds {
-            if self.round >= max {
-                debug!("Reached max rounds limit: {}", max);
-                return false;
-            }
-        }
-
+    fn reached_limit(&self, budget: &ChannelBudget, past_messages: &[ChatMessage]) -> bool {
         // For unlimited budgets, continue (until max_rounds if set)
         if budget.is_unlimited() {
-            return true;
+            return false;
         }
 
         // Check if we have enough send budget for another message
         if let Some(available_send) = budget.available_input_bytes(past_messages) {
             if available_send < self.target_request_bytes as usize {
                 debug!(
-                    "Send budget exhausted: {} available, {} needed",
-                    available_send, self.target_request_bytes
+                    "Send budget exhausted: {available_send} available, {} needed",
+                    self.target_request_bytes
                 );
-                return false;
+                return true;
             }
         }
 
@@ -168,11 +164,11 @@ impl BenchmarkInputSource {
                     "Receive budget exhausted: {available_recv} available, {} needed",
                     self.target_response_bytes
                 );
-                return false;
+                return true;
             }
         }
 
-        true
+        false
     }
 }
 
@@ -199,8 +195,15 @@ impl InputSource for BenchmarkInputSource {
         }
 
         // Check if we should continue
-        if !self.should_continue(budget, past_messages) {
-            return Ok(None);
+        if let Some(max) = self.max_rounds {
+            if self.round >= max {
+                debug!("Reached max rounds limit: {}", max);
+                return Ok(None);
+            }
+        }
+
+        if self.reached_limit(budget, past_messages) {
+            return Err(anyhow::anyhow!("Reached limit even though the initial budget configuration allowed for more messages."));
         }
 
         // Generate and return the next message

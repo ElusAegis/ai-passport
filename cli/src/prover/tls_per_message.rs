@@ -10,8 +10,8 @@
 use super::Prover;
 use crate::config::notary::NotaryConfig;
 use crate::config::ProveConfig;
-use crate::prover::capacity::estimate_round_capacity;
-use crate::providers::budget::{ChannelBudget, ChannelCapacity};
+use crate::prover::capacity::estimate_per_message_capacity;
+use crate::providers::budget::ChannelBudget;
 use crate::providers::interaction::single_interaction_round;
 use crate::tlsn::notarise::notarise_session;
 use crate::tlsn::save_proof::save_to_file;
@@ -56,14 +56,25 @@ impl Prover for TlsPerMessageProver {
         let port = config.provider.port;
 
         // Budget tracks overhead observations across rounds
-        let mut budget = ChannelBudget::with_capacity(ChannelCapacity::from_notary(&self.notary));
+        let mut budget = ChannelBudget::from_config(&self.notary, config);
 
         // Helper to spawn a notary setup for a given lookahead
         let spawn_setup = |messages: &[ChatMessage], budget: &ChannelBudget, lookahead| {
             let domain = domain.clone();
-            let notary_config =
-                estimate_round_capacity(&self.notary, config, messages, budget, lookahead);
-            tokio::spawn(async move { (setup(&notary_config, &domain, port).await, notary_config) })
+            let notary_config = estimate_per_message_capacity(
+                &self.notary,
+                config,
+                messages,
+                budget.overhead(),
+                lookahead,
+            )?;
+            Ok::<_, anyhow::Error>(tokio::spawn(async move {
+                if lookahead > 1 {
+                    // Sleep for 50ms to allow previous setup to progress
+                    tokio::time::sleep(std::time::Duration::from_millis(150)).await;
+                }
+                (setup(&notary_config, &domain, port).await, notary_config)
+            }))
         };
 
         let mut stored_proofs = Vec::<PathBuf>::new();
@@ -71,24 +82,21 @@ impl Prover for TlsPerMessageProver {
 
         // Set up the current instance of the prover
         let mut current_instance_handle: JoinHandle<SetupResult> =
-            spawn_setup(&all_messages, &budget, 1);
+            spawn_setup(&all_messages, &budget, 1)?;
 
         // Pre-warm the next instance with capacity for second round (lookahead=2)
         let mut future_instance_handle: JoinHandle<SetupResult> =
-            spawn_setup(&all_messages, &budget, 2);
+            spawn_setup(&all_messages, &budget, 2)?;
 
-        let mut counter = 0;
         loop {
             // Wait for the current instance to be ready
             let (prover_result, notary_config) = current_instance_handle.await?;
             let mut current_instance = prover_result?;
 
-            budget
-                .reset()
-                .set_capacity(ChannelCapacity::from_notary(&notary_config));
+            budget.reset().set_capacity((&notary_config).into());
 
             // Per-message uses close connection (close_connection = true)
-            let stop = single_interaction_round(
+            let was_stopped = single_interaction_round(
                 &mut current_instance.1,
                 config,
                 &mut all_messages,
@@ -97,7 +105,7 @@ impl Prover for TlsPerMessageProver {
             )
             .await?;
 
-            if stop {
+            if was_stopped {
                 break;
             }
 
@@ -108,8 +116,12 @@ impl Prover for TlsPerMessageProver {
                 .context("Error notarizing the session")?;
 
             // Save the proof to a file
+            let current_exchanges = (all_messages.len() / 2) as u32; // Each exchange is 2 messages
             stored_proofs.push(save_to_file(
-                &format!("{}_part_{counter}_per_message_proof", config.model_id),
+                &format!(
+                    "{}_part_{current_exchanges}_per_message_proof",
+                    config.model_id
+                ),
                 &attestation,
                 &config.provider,
                 &secrets,
@@ -119,8 +131,7 @@ impl Prover for TlsPerMessageProver {
             current_instance_handle = future_instance_handle;
 
             // Pre-warm the next instance with updated capacity estimate
-            future_instance_handle = spawn_setup(&all_messages, &budget, 2);
-            counter += 1;
+            future_instance_handle = spawn_setup(&all_messages, &budget, 2)?;
         }
 
         display_proofs(&stored_proofs);

@@ -3,7 +3,9 @@
 //! This module provides types to track and enforce byte limits on send/receive
 //! channels, primarily for TLS-notarized sessions where channel capacity is limited.
 
-use crate::{ChatMessage, NotaryConfig};
+use crate::providers::message::ChatMessageRole::{Assistant, User};
+use crate::providers::Provider;
+use crate::{ChatMessage, NotaryConfig, ProveConfig};
 use anyhow::{bail, Result};
 use hyper::body::Bytes;
 use hyper::Request;
@@ -13,68 +15,108 @@ use tracing::{debug, warn};
 /// Conservative estimate accounting for UTF-8 and JSON escaping.
 pub const BYTES_PER_TOKEN: u32 = 7;
 
-/// Initial estimate for request overhead (HTTP headers).
-/// Used until we observe real values.
+/// Default request overhead (HTTP headers) for OpenAI-compatible providers.
 /// This is the largest observed overhead for requests with typical headers.
-const REQUEST_OVERHEAD_ESTIMATE: usize = 285;
+pub const DEFAULT_REQUEST_OVERHEAD: usize = 350;
 
-/// Initial estimate for response overhead (JSON structure + HTTP headers).
-/// Used until we observe real values.
+/// Default response overhead (JSON structure + HTTP headers) for OpenAI-compatible providers.
 /// This is the largest observed overhead for typical chat completions.
-const RESPONSE_OVERHEAD_ESTIMATE: usize = 5000;
+pub const DEFAULT_RESPONSE_OVERHEAD: usize = 2000;
 
-/// Shared state for observed overhead values.
-/// Initially uses estimates, then switches to real observed values.
-#[derive(Debug, Clone, Default)]
-pub struct ObservedOverhead {
-    /// Observed request overhead (total - content). None = use estimate.
+/// Threshold for warning about overhead drift (10%).
+const OVERHEAD_DRIFT_THRESHOLD_PERCENT: usize = 10;
+
+/// Expected HTTP overhead for capacity planning.
+///
+/// Contains expected overhead values from the provider. When fields are `None`,
+/// the default constants are used. Values are updated with observed data during
+/// a session, with warnings if observed differs significantly from expected.
+#[derive(Debug, Clone, Copy, Default)]
+pub struct ExpectedChannelOverhead {
+    /// Request overhead (HTTP headers, etc). None = use DEFAULT_REQUEST_OVERHEAD.
     request: Option<usize>,
-    /// Observed response overhead (total - content). None = use estimate.
+    /// Response overhead (HTTP headers, JSON structure). None = use DEFAULT_RESPONSE_OVERHEAD.
     response: Option<usize>,
 }
 
-impl ObservedOverhead {
-    /// Get request overhead (observed or estimate).
-    fn request_overhead(&self) -> usize {
-        self.request.unwrap_or(REQUEST_OVERHEAD_ESTIMATE)
+impl ExpectedChannelOverhead {
+    /// Create a new overhead configuration with optional expected values.
+    ///
+    /// Use `None` for fields to use conservative defaults.
+    pub fn new(request: Option<usize>, response: Option<usize>) -> Self {
+        Self { request, response }
     }
 
-    /// Get response overhead (observed or estimate).
-    fn response_overhead(&self) -> usize {
-        self.response.unwrap_or(RESPONSE_OVERHEAD_ESTIMATE)
+    /// Get request overhead (value or default).
+    pub fn request_overhead(&self) -> usize {
+        self.request.unwrap_or(DEFAULT_REQUEST_OVERHEAD)
     }
 
-    /// Update request overhead based on the first observed values.
-    /// As we generate requests ourselves, the overhead is constant after the first observation.
-    fn update_request(&mut self, total_bytes: usize, content_bytes: usize) {
-        let overhead = total_bytes.saturating_sub(content_bytes);
-        if self.request.is_none() {
-            debug!(
-                "overhead: observed request overhead = {} (total={}, content={})",
-                overhead, total_bytes, content_bytes
-            );
-            self.request = Some(overhead);
-        }
+    /// Get response overhead (value or default).
+    pub fn response_overhead(&self) -> usize {
+        self.response.unwrap_or(DEFAULT_RESPONSE_OVERHEAD)
     }
 
-    /// Update response overhead from observed values.
-    /// Warns if updating after initial observation (should be constant).
-    fn update_response(&mut self, total_bytes: usize, content_bytes: usize) {
-        let overhead = total_bytes.saturating_sub(content_bytes);
-        if let Some(prev) = self.response {
-            if prev != overhead {
-                warn!(
-                    "response overhead changed unexpectedly: {} -> {} (expected constant)",
-                    prev, overhead
+    /// Update request overhead with observed value.
+    ///
+    /// Logs the first observation. On subsequent observations, warns if the
+    /// observed value differs significantly from the previous value.
+    pub fn update_request(&mut self, total_bytes: usize, content_bytes: usize) {
+        let observed = total_bytes.saturating_sub(content_bytes);
+
+        match self.request {
+            None => {
+                debug!(
+                    "overhead: observed request overhead = {} (total={}, content={})",
+                    observed, total_bytes, content_bytes
                 );
             }
-        } else {
-            debug!(
-                "overhead: observed response overhead = {} (total={}, content={})",
-                overhead, total_bytes, content_bytes
+            Some(expected) => {
+                Self::warn_if_drifted("request", observed, expected);
+            }
+        }
+
+        self.request = Some(observed);
+    }
+
+    /// Update response overhead with observed value.
+    ///
+    /// Logs the first observation. On subsequent observations, warns if the
+    /// observed value differs significantly from the previous value.
+    pub fn update_response(&mut self, total_bytes: usize, content_bytes: usize) {
+        let observed = total_bytes.saturating_sub(content_bytes);
+
+        match self.response {
+            None => {
+                debug!(
+                    "overhead: observed response overhead = {} (total={}, content={})",
+                    observed, total_bytes, content_bytes
+                );
+            }
+            Some(expected) => {
+                Self::warn_if_drifted("response", observed, expected);
+            }
+        }
+
+        self.response = Some(observed);
+    }
+
+    /// Warn if observed overhead has drifted significantly from expected.
+    fn warn_if_drifted(kind: &str, observed: usize, expected: usize) {
+        let diff = (observed as isize - expected as isize).unsigned_abs();
+        let threshold = expected / OVERHEAD_DRIFT_THRESHOLD_PERCENT;
+        debug!(
+            "overhead: observed {} overhead = {} (expected = {}, diff = {})",
+            kind, observed, expected, diff
+        );
+
+        if diff > threshold {
+            let percent = diff * 100 / expected.max(1);
+            warn!(
+                "observed {} overhead ({}) differs from expected ({}) by {}%",
+                kind, observed, expected, percent
             );
         }
-        self.response = Some(overhead);
     }
 }
 
@@ -96,19 +138,18 @@ pub enum ChannelCapacity {
     },
 }
 
-impl ChannelCapacity {
-    /// Create a limited capacity from notary configuration.
-    pub fn from_notary(notary: &NotaryConfig) -> Self {
+impl From<&NotaryConfig> for ChannelCapacity {
+    fn from(value: &NotaryConfig) -> Self {
         ChannelCapacity::Limited {
-            sent_capacity: notary.max_total_sent,
-            recv_capacity: notary.max_total_recv,
+            sent_capacity: value.max_total_sent,
+            recv_capacity: value.max_total_recv,
         }
     }
 }
 
 /// Tracks byte budget for send/receive channels.
 ///
-/// Monitors usage against capacity, learns overhead from observed values,
+/// Monitors usage against capacity, updates overhead from observed values,
 /// and provides helpers for calculating remaining budget and max tokens.
 #[derive(Debug, Clone, Default)]
 pub struct ChannelBudget {
@@ -118,15 +159,27 @@ pub struct ChannelBudget {
     recv: usize,
     /// The capacity configuration (unlimited or limited).
     capacity: ChannelCapacity,
-    /// Learned overhead state (improves estimates from observed values).
-    overhead: ObservedOverhead,
+    /// Expected overhead (from provider, updated with observed values).
+    overhead: ExpectedChannelOverhead,
 }
 
 impl ChannelBudget {
-    /// Create a budget with the given capacity.
+    /// Create a budget with the given capacity using default overhead estimates.
     pub fn with_capacity(capacity: ChannelCapacity) -> Self {
         ChannelBudget {
             capacity,
+            ..Default::default()
+        }
+    }
+
+    /// Create a budget with given capacity and expected overhead from provider.
+    pub fn from_config(notary_config: &NotaryConfig, prove_config: &ProveConfig) -> Self {
+        let capacity = notary_config.into();
+        let overhead = prove_config.provider.expected_overhead();
+
+        ChannelBudget {
+            capacity,
+            overhead,
             ..Default::default()
         }
     }
@@ -137,6 +190,11 @@ impl ChannelBudget {
             capacity: ChannelCapacity::Unlimited,
             ..Default::default()
         }
+    }
+
+    /// Get the current overhead estimates.
+    pub fn overhead(&self) -> &ExpectedChannelOverhead {
+        &self.overhead
     }
 
     /// Reset usage counters while preserving learned overhead.
@@ -178,9 +236,9 @@ impl ChannelBudget {
         Ok(())
     }
 
-    /// Record bytes sent and update remaining budget.
+    /// Record bytes sent and update overhead estimate.
     ///
-    /// Also updates the observed overhead for future estimates.
+    /// Updates the overhead with observed values, warning if significantly different.
     pub fn record_sent(&mut self, total_bytes: usize, content_bytes: usize) {
         self.sent += total_bytes;
         self.overhead.update_request(total_bytes, content_bytes);
@@ -191,16 +249,19 @@ impl ChannelBudget {
         }
 
         debug!(
-            "data ↑: total={} content={} (ratio={:.1}x)",
+            "data ↑: total={} content={} (ratio={:.1}x, left={})",
             total_bytes,
             content_bytes,
-            total_bytes as f64 / content_bytes.max(1) as f64
+            total_bytes as f64 / content_bytes.max(1) as f64,
+            self.available_input_bytes(&[])
+                .map(|v| v.to_string())
+                .unwrap_or_else(|| "unlimited".to_string())
         );
     }
 
-    /// Record bytes received and update remaining budget.
+    /// Record bytes received and update overhead estimate.
     ///
-    /// Also updates the observed overhead for future estimates.
+    /// Updates the overhead with observed values, warning if significantly different.
     pub fn record_recv(&mut self, total_bytes: usize, content_bytes: usize) {
         self.recv += total_bytes;
         self.overhead.update_response(total_bytes, content_bytes);
@@ -211,16 +272,19 @@ impl ChannelBudget {
         }
 
         debug!(
-            "data ↓: total={} content={} (ratio={:.1}x)",
+            "data ↓: total={} content={} (ratio={:.1}x, left={})",
             total_bytes,
             content_bytes,
-            total_bytes as f64 / content_bytes.max(1) as f64
+            total_bytes as f64 / content_bytes.max(1) as f64,
+            self.available_recv_bytes()
+                .map(|v| v.to_string())
+                .unwrap_or_else(|| "unlimited".to_string())
         );
     }
 
     /// Calculate max_tokens based on remaining receive budget.
     ///
-    /// Uses observed response overhead if available, otherwise falls back to estimate.
+    /// Uses current response overhead estimate.
     /// Returns `None` for unlimited budgets, meaning no limit should be set.
     /// Returns `Some(tokens)` for limited budgets.
     pub fn max_bytes_left_for_response(&self) -> Option<u32> {
@@ -238,23 +302,27 @@ impl ChannelBudget {
 
     /// Get remaining input capacity for user display.
     ///
-    /// Uses observed request overhead if available, otherwise falls back to estimate.
+    /// Uses current request overhead estimate.
     /// Returns `None` for unlimited budgets.
     /// Returns `Some(bytes)` showing how many bytes the user can still send.
     pub fn available_input_bytes(&self, past_messages: &[ChatMessage]) -> Option<usize> {
         match self.capacity {
             ChannelCapacity::Unlimited => None,
             ChannelCapacity::Limited { sent_capacity, .. } => {
-                let repeated_content_bytes: usize =
-                    serde_json::json!(past_messages).to_string().len();
+                let repeated_content_bytes: usize = serde_json::to_string(past_messages)
+                    .expect("Failed to serialize messages to calculate their size")
+                    .len();
 
                 let request_overhead = self.overhead.request_overhead();
                 let sent_remaining = sent_capacity.saturating_sub(self.sent);
-                let new_message_remaining = sent_remaining
+                let user_message_remaining = sent_remaining
                     .saturating_sub(repeated_content_bytes)
                     .saturating_sub(request_overhead);
+                let user_message_overhead = ChatMessage::overhead(User);
+                let pure_message_remaining =
+                    user_message_remaining.saturating_sub(user_message_overhead);
 
-                Some(new_message_remaining)
+                Some(pure_message_remaining)
             }
         }
     }
@@ -267,7 +335,10 @@ impl ChannelBudget {
             ChannelCapacity::Unlimited => None,
             ChannelCapacity::Limited { recv_capacity, .. } => {
                 let recv_remaining = recv_capacity.saturating_sub(self.recv);
-                Some(recv_remaining)
+                let assistant_message_overhead = ChatMessage::overhead(Assistant);
+                let pure_message_remaining =
+                    recv_remaining.saturating_sub(assistant_message_overhead);
+                Some(pure_message_remaining)
             }
         }
     }
@@ -277,12 +348,12 @@ impl ChannelBudget {
         matches!(self.capacity, ChannelCapacity::Unlimited)
     }
 
-    /// Get the current request overhead estimate (observed or default).
+    /// Get the current request overhead estimate.
     pub fn request_overhead(&self) -> usize {
         self.overhead.request_overhead()
     }
 
-    /// Get the current response overhead estimate (observed or default).
+    /// Get the current response overhead estimate.
     pub fn response_overhead(&self) -> usize {
         self.overhead.response_overhead()
     }
@@ -393,14 +464,13 @@ mod tests {
     }
 
     #[test]
-    fn test_max_tokens_calculation() {
+    fn test_max_bytes_for_response() {
         let budget = make_limited_budget(1000, 10000);
 
-        let tokens = budget.max_bytes_left_for_response().unwrap();
+        let bytes = budget.max_bytes_left_for_response().unwrap();
         // recv_capacity=10000, recv=0, overhead_estimate=5000
         // usable = 10000 - 5000 = 5000
-        // tokens = 5000 / 5 = 1000
-        assert_eq!(tokens, 1000);
+        assert_eq!(bytes, 5000);
     }
 
     #[test]
@@ -408,9 +478,9 @@ mod tests {
         let budget = make_limited_budget(1000, 2000);
 
         let available = budget.available_input_bytes(&[]).unwrap();
-        // sent_capacity=1000, sent=0, overhead_estimate=285
-        // available = 1000 - 285 = 715
-        assert_eq!(available, 715);
+        // sent_capacity=1000, sent=0, overhead_estimate=285, empty_messages="[]"=2
+        // available = 1000 - 2 - 285 = 713
+        assert_eq!(available, 713);
     }
 
     #[test]
@@ -426,11 +496,11 @@ mod tests {
     fn test_overhead_updates_via_budget() {
         let mut budget = make_limited_budget(1000, 10000);
 
-        // Initially uses estimates
-        // available_input = 1000 - 285 (estimate) = 715
-        assert_eq!(budget.available_input_bytes(&[]).unwrap(), 715);
-        // max_tokens = (10000 - 5000) / 5 = 1000
-        assert_eq!(budget.max_bytes_left_for_response().unwrap(), 1000);
+        // Initially uses estimates (plus "[]" = 2 bytes for empty messages)
+        // available_input = 1000 - 2 - 285 = 713
+        assert_eq!(budget.available_input_bytes(&[]).unwrap(), 713);
+        // max_bytes = 10000 - 5000 = 5000
+        assert_eq!(budget.max_bytes_left_for_response().unwrap(), 5000);
 
         // Record sends/recvs which update overhead
         budget.record_sent(300, 100); // overhead = 200
@@ -438,12 +508,12 @@ mod tests {
 
         // Now uses observed values (and remaining is reduced)
         // sent_remaining = 1000 - 300 = 700
-        // available_input = 700 - 200 (observed) = 500
-        assert_eq!(budget.available_input_bytes(&[]).unwrap(), 500);
+        // available_input = 700 - 2 - 200 (observed) = 498
+        assert_eq!(budget.available_input_bytes(&[]).unwrap(), 498);
 
         // recv_remaining = 10000 - 400 = 9600
-        // max_tokens = (9600 - 200) / 5 = 1880
-        assert_eq!(budget.max_bytes_left_for_response().unwrap(), 1880);
+        // usable_bytes = 9600 - 200 = 9400
+        assert_eq!(budget.max_bytes_left_for_response().unwrap(), 9400);
     }
 
     #[test]
@@ -461,8 +531,8 @@ mod tests {
         assert_eq!(budget.recv, 0);
 
         // Overhead should still be observed values
-        // available_input = 1000 - 200 (observed) = 800
-        assert_eq!(budget.available_input_bytes(&[]).unwrap(), 800);
+        // available_input = 1000 - 2 - 200 (observed) = 798
+        assert_eq!(budget.available_input_bytes(&[]).unwrap(), 798);
     }
 
     /// Build the expected HTTP/1.1 wire format string for a request.

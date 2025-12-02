@@ -1,3 +1,4 @@
+use super::budget::ExpectedChannelOverhead;
 use super::{ChatMessage, Provider};
 use anyhow::Result;
 use serde_json::{json, Value};
@@ -10,6 +11,12 @@ impl Anthropic {
 
     /// Maximum tokens allowed for chat completion
     pub(crate) const MAX_TOKENS: u32 = 1024 * 10;
+
+    /// Anthropic's response overhead
+    const RESPONSE_OVERHEAD: usize = 1500;
+
+    /// Anthropic's request overhead
+    const REQUEST_OVERHEAD: usize = 370;
 }
 
 impl Provider for Anthropic {
@@ -38,7 +45,7 @@ impl Provider for Anthropic {
         })
     }
 
-    fn parse_chat_reply_message<'a>(&self, response: &'a Value) -> Result<ChatMessage> {
+    fn parse_chat_reply_message(&self, response: &Value) -> Result<ChatMessage> {
         let message = response["content"][0].as_object().ok_or_else(|| {
             anyhow::anyhow!("Failed to parse assistant message from Anthropic response")
         })?;
@@ -73,5 +80,9 @@ impl Provider for Anthropic {
             "anthropic-ratelimit-tokens-reset",
             "x-kong-request-id",
         ]
+    }
+
+    fn expected_overhead(&self) -> ExpectedChannelOverhead {
+        ExpectedChannelOverhead::new(Some(Self::REQUEST_OVERHEAD), Some(Self::RESPONSE_OVERHEAD))
     }
 }

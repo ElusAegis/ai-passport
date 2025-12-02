@@ -6,7 +6,7 @@ use tlsn_core::transcript::TranscriptCommitConfig;
 use tlsn_core::Secrets;
 use tlsn_formats::http::{DefaultHttpCommitter, HttpCommit, HttpTranscript};
 use tlsn_prover::{state, Prover};
-use tracing::debug;
+use tracing::{debug, trace};
 
 pub async fn notarise_session(
     mut prover: Prover<state::Committed>,
@@ -16,7 +16,7 @@ pub async fn notarise_session(
 
     let body_content = &transcript.responses[0].body.as_ref().unwrap().content;
     let body = String::from_utf8_lossy(body_content.span().as_bytes());
-    debug!("Response body: {}", body);
+    trace!("Response body: {}", body);
 
     // Commit to the transcript.
     let mut builder = TranscriptCommitConfig::builder(prover.transcript());

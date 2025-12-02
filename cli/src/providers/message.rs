@@ -106,6 +106,14 @@ impl ChatMessage {
     pub fn role(&self) -> ChatMessageRole {
         self.role
     }
+
+    pub fn overhead(role: ChatMessageRole) -> usize {
+        let message = Self {
+            role,
+            content: String::new(),
+        };
+        serde_json::to_string(&message).unwrap().len()
+    }
 }
 
 #[cfg(test)]

@@ -30,7 +30,7 @@ pub struct NotaryConfig {
     /// Defer decryption of messages until the end of the session
     #[builder(default = "true")]
     pub defer_decryption: bool,
-    /// Maximum total number of messages decrypted in the online phase
+    /// Maximum total number of bytes decrypted in the online phase
     #[builder(default = "0")]
     pub max_decrypted_online: usize,
     /// Network optimization strategy

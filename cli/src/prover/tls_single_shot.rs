@@ -7,10 +7,11 @@
 //!
 //! **Trade-off**: Sent bytes grow O(n²) due to conversation history being re-sent with each request.
 
+use super::capacity::estimate_single_shot_capacity;
 use super::Prover;
 use crate::config::notary::NotaryConfig;
 use crate::config::ProveConfig;
-use crate::providers::budget::{ChannelBudget, ChannelCapacity};
+use crate::providers::budget::ChannelBudget;
 use crate::providers::interaction::single_interaction_round;
 use crate::tlsn::notarise::notarise_session;
 use crate::tlsn::save_proof::save_to_file;
@@ -39,25 +40,33 @@ impl TlsSingleShotProver {
 #[async_trait]
 impl Prover for TlsSingleShotProver {
     async fn run(&self, config: &ProveConfig) -> Result<()> {
-        // 1) Setup TLS connection and prover
+        // 1) Estimate optimal capacity using provider's expected overhead
+        let optimal_notary = estimate_single_shot_capacity(&self.notary, config)
+            .context("Error estimating single-shot capacity")?;
+
+        // 2) Setup TLS connection and prover with sized capacity
         let (prover_task, mut request_sender) = with_spinner_future(
             "Please wait while the system is setup...",
-            setup(&self.notary, &config.provider.domain, config.provider.port),
+            setup(
+                &optimal_notary,
+                &config.provider.domain,
+                config.provider.port,
+            ),
         )
         .await?;
 
-        // 2) Create byte budget from notary config (shared across entire session)
-        let mut budget = ChannelBudget::with_capacity(ChannelCapacity::from_notary(&self.notary));
+        // 3) Create budget for tracking actual usage during the session
+        let mut budget = ChannelBudget::from_config(&optimal_notary, config);
 
-        // 3) Interaction loop
-        let mut messages = vec![];
+        // 4) Interaction loop
+        let mut all_messages = vec![];
 
         loop {
             // Single-shot uses keep-alive (close_connection = false)
             let was_stopped = single_interaction_round(
                 &mut request_sender,
                 config,
-                &mut messages,
+                &mut all_messages,
                 false,
                 &mut budget,
             )
@@ -69,7 +78,7 @@ impl Prover for TlsSingleShotProver {
             }
         }
 
-        // 3) Notarize the session
+        // 5) Notarize the session
         debug!("Notarizing the session...");
         let (attestation, secrets) = with_spinner_future(
             "Generating a cryptographic proof of the conversation...",
@@ -78,7 +87,7 @@ impl Prover for TlsSingleShotProver {
         .await
         .context("Error notarizing the session")?;
 
-        // 4) Save the proof
+        // 6) Save the proof
         let file_path = save_to_file(
             &format!("{}_single_shot_proof", config.model_id),
             &attestation,
@@ -88,7 +97,7 @@ impl Prover for TlsSingleShotProver {
 
         let file_paths = vec![file_path];
 
-        // 5) Display success
+        // 7) Display success
         display_proofs(&file_paths);
 
         Ok(())

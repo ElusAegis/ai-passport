@@ -1,5 +1,6 @@
 mod anthropic;
 pub mod budget;
+mod custom;
 mod fireworks;
 pub mod interaction;
 pub mod message;
@@ -10,6 +11,8 @@ mod unknown;
 use ambassador::{delegatable_trait, Delegate};
 pub use anthropic::Anthropic;
 use anyhow::Result;
+pub use budget::ExpectedChannelOverhead;
+use custom::Custom;
 use derive_builder::Builder;
 use dialoguer::console::style;
 use enum_dispatch::enum_dispatch;
@@ -89,6 +92,16 @@ pub trait Provider {
 
     /// Response headers to censor for privacy (default: common tracking headers)
     fn response_censor_headers(&self) -> &'static [&'static str];
+
+    /// Expected HTTP overhead for capacity planning.
+    ///
+    /// Returns expected overhead values. Fields set to `None` use conservative defaults.
+    /// Providers with known overhead characteristics can return specific values.
+    ///
+    /// If observed overhead differs significantly from expected, a warning is logged.
+    fn expected_overhead(&self) -> ExpectedChannelOverhead {
+        ExpectedChannelOverhead::default()
+    }
 }
 
 #[derive(Debug, Clone, Builder, Delegate)]
@@ -144,6 +157,7 @@ impl ApiProviderBuilder {
 #[strum(serialize_all = "snake_case")]
 enum ApiProviderInner {
     Unknown,
+    Custom,
     Anthropic,
     Fireworks,
     Mistral,
@@ -153,7 +167,9 @@ enum ApiProviderInner {
 impl ApiProviderInner {
     /// Detect the appropriate provider based on domain
     fn from_domain(domain: &str) -> Self {
-        if domain.contains("anthropic") {
+        if domain.contains("api.proof-of-autonomy.elusaegis.xyz") {
+            Custom.into()
+        } else if domain.contains("anthropic") {
             Anthropic.into()
         } else if domain.contains("fireworks") {
             Fireworks.into()

@@ -12,7 +12,13 @@
 //! - `MODEL_API_PORT` (optional, default: 443): API port
 //! - `BENCHMARK_REQUEST_BYTES` (optional, default: 500): Target request size in bytes
 //! - `BENCHMARK_RESPONSE_BYTES` (optional, default: 500): Target response size in bytes
-//! - `BENCHMARK_MAX_ROUNDS` (optional, default: 5): Maximum rounds to run
+//! - `BENCHMARK_MAX_ROUNDS` (optional, default: 10): Maximum rounds to run
+//! - `PROVER_PRESETS` (optional): Comma-separated list of prover preset names to run
+//!   (e.g., "direct,tls_single_shot"). If not set, all presets are used.
+//! - `NOTARY_PRESETS` (optional): Comma-separated list of notary preset names to use
+//!   (e.g., "notary-local,notary-pse"). If not set, all presets are used.
+//! - `NOTARY_MAX_RECV_OVERWRITE` (optional): Override max receive bytes for notary
+//! - `NOTARY_MAX_SEND_OVERWRITE` (optional): Override max send bytes for notary
 //!
 //! # Output
 //!
@@ -32,7 +38,7 @@ use dotenvy::var;
 use presets::{all_notary_presets, all_prover_presets};
 use results::BenchmarkConfig;
 use runner::run_benchmark;
-use tracing::{error, info};
+use tracing::{debug, error, info};
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
@@ -71,6 +77,29 @@ async fn main() -> anyhow::Result<()> {
         .ok()
         .flatten();
 
+    // Filter presets by name if env vars are set, otherwise use all
+    let notary_presets = match var("NOTARY_PRESETS") {
+        Ok(filter) => {
+            let names: Vec<&str> = filter.split(',').map(|s| s.trim()).collect();
+            all_notary_presets()
+                .into_iter()
+                .filter(|p| names.contains(&p.name))
+                .collect()
+        }
+        Err(_) => all_notary_presets(),
+    };
+
+    let prover_presets = match var("PROVER_PRESETS") {
+        Ok(filter) => {
+            let names: Vec<&str> = filter.split(',').map(|s| s.trim()).collect();
+            all_prover_presets()
+                .into_iter()
+                .filter(|p| names.contains(&p.name))
+                .collect()
+        }
+        Err(_) => all_prover_presets(),
+    };
+
     info!("Benchmark configuration:");
     info!("  Domain: {}:{}", domain, port);
     info!("  Model: {}", model_id);
@@ -86,10 +115,6 @@ async fn main() -> anyhow::Result<()> {
         .build()
         .context("Failed to build ApiProvider")?;
 
-    // Get all presets
-    let prover_presets = all_prover_presets();
-    let notary_presets = all_notary_presets();
-
     info!(
         "Running {} prover(s) x {} notary preset(s)",
         prover_presets.len(),
@@ -101,6 +126,7 @@ async fn main() -> anyhow::Result<()> {
         .model_id(&model_id)
         .max_request_bytes(target_request_bytes)
         .max_response_bytes(target_response_bytes)
+        .expected_exchanges(max_rounds as u32)
         .build()
         .context("Failed to build ProveConfig")?;
 
@@ -150,6 +176,7 @@ async fn main() -> anyhow::Result<()> {
                         prover_preset.name, notary_preset.name, e
                     );
                     failure_count += 1;
+                    debug!("Error details: {:?}", e.chain().collect::<Vec<_>>());
                 }
             }
 

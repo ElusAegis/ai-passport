@@ -55,8 +55,8 @@ pub const NOTARY_LOCAL: NotaryPreset = NotaryPreset {
     port: 7047,
     path_prefix: "",
     mode: NotaryMode::RemoteNonTLS,
-    max_sent_bytes: 16 * KIB,
-    max_recv_bytes: 16 * KIB,
+    max_sent_bytes: 64 * KIB,
+    max_recv_bytes: 64 * KIB,
 };
 
 /// PSE notary preset (notary.pse.dev:443, TLS).

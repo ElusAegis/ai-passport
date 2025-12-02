@@ -23,6 +23,9 @@ pub struct ProveConfig {
     /// Max bytes for the model request
     #[builder(setter(into), default)]
     pub max_request_bytes: Option<u32>,
+    /// Expected number of message exchanges (user + assistant pairs).
+    #[builder(setter(into), default)]
+    pub expected_exchanges: Option<u32>,
 }
 
 impl ProveConfigBuilder {}
