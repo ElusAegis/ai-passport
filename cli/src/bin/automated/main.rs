@@ -45,26 +45,34 @@
 //! Results are saved to `benchmarks/{provider}_{model}_{messages}_{req_bytes}_{resp_bytes}.jsonl`
 //! in JSONL format, with one JSON object per benchmark run. Failed benchmarks are saved
 //! with a `_failed` suffix.
+//!
+//! Logs are also saved to `benchmarks/logs/benchmark_{timestamp}.log` with trace level
+//! for `ai_passport` and `automated_benchmarks` modules.
 
 mod input_source;
+mod logging;
 mod presets;
 mod results;
 mod runner;
 mod stats;
 
+use crate::logging::setup_logging;
 use ai_passport::ProveConfig;
 use anyhow::Context;
 use dotenvy::var;
-use presets::{load_model_presets, load_notary_presets, load_prover_presets, parse_network_setting};
+use presets::{
+    load_model_presets, load_notary_presets, load_prover_presets, parse_network_setting,
+};
 use results::BenchmarkConfig;
 use runner::run_benchmark;
 use tracing::{debug, error, info, warn};
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
-    tracing_subscriber::fmt::init();
-
     let _ = dotenvy::dotenv().ok();
+
+    // Set up logging (keep guard alive for the duration of main)
+    let _log_guard = setup_logging()?;
 
     // Benchmark configuration
     let repetitions = var("BENCHMARK_REPETITIONS")
