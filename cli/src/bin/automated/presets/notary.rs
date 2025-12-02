@@ -52,6 +52,17 @@ pub const NOTARY_LOCAL: NotaryPreset = NotaryPreset {
     max_recv_bytes: 64 * KIB,
 };
 
+/// Local notary preset (localhost:7047, no TLS).
+pub const NOTARY_REMOTE: NotaryPreset = NotaryPreset {
+    name: "notary-remote",
+    domain: "notary.proof-of-autonomy.elusaegis.xyz",
+    port: 7047,
+    path_prefix: "",
+    mode: NotaryMode::RemoteTLS,
+    max_sent_bytes: 64 * KIB,
+    max_recv_bytes: 64 * KIB,
+};
+
 /// PSE notary preset (notary.pse.dev:443, TLS).
 pub const NOTARY_PSE: NotaryPreset = NotaryPreset {
     name: "notary-pse",
@@ -64,7 +75,7 @@ pub const NOTARY_PSE: NotaryPreset = NotaryPreset {
 };
 
 /// All static notary presets.
-const STATIC_NOTARY_PRESETS: &[&NotaryPreset] = &[&NOTARY_LOCAL, &NOTARY_PSE];
+const STATIC_NOTARY_PRESETS: &[&NotaryPreset] = &[&NOTARY_LOCAL, &NOTARY_PSE, &NOTARY_REMOTE];
 
 /// Get all available notary presets.
 pub fn all_notary_presets() -> Vec<&'static NotaryPreset> {
@@ -73,7 +84,10 @@ pub fn all_notary_presets() -> Vec<&'static NotaryPreset> {
 
 /// Find a notary preset by name.
 pub fn find_notary_preset(name: &str) -> Option<&'static NotaryPreset> {
-    STATIC_NOTARY_PRESETS.iter().find(|p| p.name == name).copied()
+    STATIC_NOTARY_PRESETS
+        .iter()
+        .find(|p| p.name == name)
+        .copied()
 }
 
 /// Load notary presets based on environment configuration.
@@ -101,7 +115,10 @@ pub fn load_notary_presets() -> Vec<&'static NotaryPreset> {
                 available.join(", ")
             );
         } else {
-            tracing::info!("Using {} notary preset(s) from NOTARY_PRESETS", presets.len());
+            tracing::info!(
+                "Using {} notary preset(s) from NOTARY_PRESETS",
+                presets.len()
+            );
         }
 
         return presets;
