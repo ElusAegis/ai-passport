@@ -26,7 +26,9 @@
 //! - `BENCHMARK_REPETITIONS` (optional, default: 1): Number of times to repeat the full benchmark suite
 //! - `BENCHMARK_REQUEST_BYTES` (optional, default: 500): Target request size in bytes
 //! - `BENCHMARK_RESPONSE_BYTES` (optional, default: 500): Target response size in bytes
-//! - `BENCHMARK_MAX_ROUNDS` (optional, default: 10): Maximum rounds to run
+//! - `BENCHMARK_MAX_ROUNDS` (optional, default: 10): Maximum rounds to run.
+//!   Comma-separated list supported (e.g., "5,10,20"). For the largest value,
+//!   only the direct prover is used.
 //! - `PROVER_PRESETS` (optional): Comma-separated list of prover preset names to run
 //!   (e.g., "direct,tls_single_shot"). If not set, all presets are used.
 //! - `NOTARY_PRESETS` (optional): Comma-separated list of notary preset names to use
@@ -73,10 +75,19 @@ async fn main() -> anyhow::Result<()> {
     let target_response_bytes = var("BENCHMARK_RESPONSE_BYTES")
         .map(|t| t.parse::<u32>())
         .unwrap_or(Ok(500))?;
-    let max_rounds = var("BENCHMARK_MAX_ROUNDS")
-        .ok()
-        .map(|r| r.parse::<usize>())
-        .unwrap_or(Ok(10))?;
+
+    // Parse max_rounds as comma-separated list
+    let max_rounds_list: Vec<usize> = var("BENCHMARK_MAX_ROUNDS")
+        .unwrap_or_else(|_| "10".to_string())
+        .split(',')
+        .filter_map(|s| s.trim().parse::<usize>().ok())
+        .collect();
+    let max_rounds_list = if max_rounds_list.is_empty() {
+        vec![10]
+    } else {
+        max_rounds_list
+    };
+    let max_rounds_largest = *max_rounds_list.iter().max().unwrap();
 
     // Notary overrides
     let notary_max_recv_overwrite = var("NOTARY_MAX_RECV_OVERWRITE")
@@ -109,13 +120,10 @@ async fn main() -> anyhow::Result<()> {
     info!("  Repetitions: {}", repetitions);
     info!("  Target request size: {} bytes", target_request_bytes);
     info!("  Target response size: {} bytes", target_response_bytes);
-    info!("  Max rounds: {}", max_rounds);
-
-    let benchmark_config = BenchmarkConfig {
-        target_request_bytes,
-        target_response_bytes,
-        max_rounds: Some(max_rounds),
-    };
+    info!(
+        "  Max rounds: {:?} (largest: {})",
+        max_rounds_list, max_rounds_largest
+    );
 
     // Track results
     let mut success_count = 0;
@@ -128,72 +136,107 @@ async fn main() -> anyhow::Result<()> {
             info!("Repetition {}/{}", rep, repetitions);
         }
 
-        // Iterate over all model presets
-        for model_preset in &model_presets {
-            info!("══════════════════════════════════════════════════════════════");
-            info!(
-                "Model: {} ({}:{})",
-                model_preset.name, model_preset.domain, model_preset.port
-            );
+        // Iterate over max_rounds configurations
+        for &max_rounds in &max_rounds_list {
+            let is_largest_rounds = max_rounds == max_rounds_largest && max_rounds_list.len() > 1;
 
-            let api_provider = model_preset.build_api_provider();
+            if max_rounds_list.len() > 1 {
+                info!("▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒");
+                info!(
+                    "Max rounds: {}{}",
+                    max_rounds,
+                    if is_largest_rounds {
+                        " (direct prover only)"
+                    } else {
+                        ""
+                    }
+                );
+            }
 
-            let prove_config = ProveConfig::builder()
-                .provider(api_provider)
-                .model_id(&model_preset.model_id)
-                .max_request_bytes(target_request_bytes)
-                .max_response_bytes(target_response_bytes)
-                .expected_exchanges(max_rounds as u32)
-                .build()
-                .context("Failed to build ProveConfig")?;
+            let benchmark_config = BenchmarkConfig {
+                target_request_bytes,
+                target_response_bytes,
+                max_rounds: Some(max_rounds),
+            };
 
-            // Iterate over all prover presets
-            for prover_preset in &prover_presets {
-                // Run with each notary preset (if not required, only run first)
-                for notary_preset in &notary_presets {
-                    info!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
-                    info!(
-                        "Running: {} / {} ({})",
-                        model_preset.name,
-                        prover_preset.name,
-                        if prover_preset.requires_notary() {
-                            notary_preset.name
-                        } else {
-                            "no notary"
+            // Iterate over all model presets
+            for model_preset in &model_presets {
+                info!("══════════════════════════════════════════════════════════════");
+                info!(
+                    "Model: {} ({}:{})",
+                    model_preset.name, model_preset.domain, model_preset.port
+                );
+
+                let api_provider = model_preset.build_api_provider();
+
+                let prove_config = ProveConfig::builder()
+                    .provider(api_provider)
+                    .model_id(&model_preset.model_id)
+                    .max_request_bytes(target_request_bytes)
+                    .max_response_bytes(target_response_bytes)
+                    .expected_exchanges(max_rounds as u32)
+                    .build()
+                    .context("Failed to build ProveConfig")?;
+
+                // Iterate over all prover presets
+                // For the largest max_rounds, only use direct prover
+                let active_provers: Vec<_> = if is_largest_rounds {
+                    prover_presets
+                        .iter()
+                        .filter(|p| !p.requires_notary())
+                        .collect()
+                } else {
+                    prover_presets.iter().collect()
+                };
+
+                for prover_preset in active_provers {
+                    // Run with each notary preset (if not required, only run first)
+                    for notary_preset in &notary_presets {
+                        info!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+                        info!(
+                            "Running: {} / {} ({}) [rounds={}]",
+                            model_preset.name,
+                            prover_preset.name,
+                            if prover_preset.requires_notary() {
+                                notary_preset.name
+                            } else {
+                                "no notary"
+                            },
+                            max_rounds
+                        );
+
+                        let mut notary_preset = (*notary_preset).clone();
+                        if let Some(overwrite) = notary_max_recv_overwrite {
+                            notary_preset.max_recv_bytes = overwrite;
                         }
-                    );
-
-                    let mut notary_preset = (*notary_preset).clone();
-                    if let Some(overwrite) = notary_max_recv_overwrite {
-                        notary_preset.max_recv_bytes = overwrite;
-                    }
-                    if let Some(overwrite) = notary_max_send_overwrite {
-                        notary_preset.max_sent_bytes = overwrite;
-                    }
-                    if let Some(overwrite) = notary_network_optimization_overwrite {
-                        notary_preset.network_optimization = overwrite;
-                    }
-
-                    let prover = prover_preset.build(&notary_preset);
-
-                    match run_benchmark(&benchmark_config, &prove_config, prover).await {
-                        Ok(path) => {
-                            info!("Completed: {}", path.display());
-                            success_count += 1;
+                        if let Some(overwrite) = notary_max_send_overwrite {
+                            notary_preset.max_sent_bytes = overwrite;
                         }
-                        Err(e) => {
-                            error!(
-                                "Failed {} / {} + {}: {}",
-                                model_preset.name, prover_preset.name, notary_preset.name, e
-                            );
-                            failure_count += 1;
-                            debug!("Error details: {:?}", e.chain().collect::<Vec<_>>());
+                        if let Some(overwrite) = notary_network_optimization_overwrite {
+                            notary_preset.network_optimization = overwrite;
                         }
-                    }
 
-                    if !prover_preset.requires_notary() {
-                        // If the prover does not require a notary, skip further notary presets
-                        break;
+                        let prover = prover_preset.build(&notary_preset);
+
+                        match run_benchmark(&benchmark_config, &prove_config, prover).await {
+                            Ok(path) => {
+                                info!("Completed: {}", path.display());
+                                success_count += 1;
+                            }
+                            Err(e) => {
+                                error!(
+                                    "Failed {} / {} + {}: {}",
+                                    model_preset.name, prover_preset.name, notary_preset.name, e
+                                );
+                                failure_count += 1;
+                                debug!("Error details: {:?}", e.chain().collect::<Vec<_>>());
+                            }
+                        }
+
+                        if !prover_preset.requires_notary() {
+                            // If the prover does not require a notary, skip further notary presets
+                            break;
+                        }
                     }
                 }
             }
