@@ -19,7 +19,7 @@ use anyhow::Result;
 use tracing::debug;
 
 /// Buffer factor for safety margin (10% extra).
-const BUFFER_FACTOR: f64 = 1.1;
+const BUFFER_FACTOR: f64 = 1.3;
 
 /// Estimate the required notary configuration for a specific round in per-message mode.
 ///
