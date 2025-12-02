@@ -23,6 +23,7 @@
 //! - `MODEL_API_PORT` (optional, default: 443): API port
 //!
 //! ## Benchmark Configuration
+//! - `BENCHMARK_REPETITIONS` (optional, default: 1): Number of times to repeat the full benchmark suite
 //! - `BENCHMARK_REQUEST_BYTES` (optional, default: 500): Target request size in bytes
 //! - `BENCHMARK_RESPONSE_BYTES` (optional, default: 500): Target response size in bytes
 //! - `BENCHMARK_MAX_ROUNDS` (optional, default: 10): Maximum rounds to run
@@ -60,6 +61,10 @@ async fn main() -> anyhow::Result<()> {
     let _ = dotenvy::dotenv().ok();
 
     // Benchmark configuration
+    let repetitions = var("BENCHMARK_REPETITIONS")
+        .ok()
+        .map(|r| r.parse::<usize>())
+        .unwrap_or(Ok(1))?;
     let target_request_bytes = var("BENCHMARK_REQUEST_BYTES")
         .map(|t| t.parse::<u32>())
         .unwrap_or(Ok(500))?;
@@ -87,6 +92,7 @@ async fn main() -> anyhow::Result<()> {
     let notary_presets = load_notary_presets();
 
     info!("Benchmark configuration:");
+    info!("  Repetitions: {}", repetitions);
     info!("  Target request size: {} bytes", target_request_bytes);
     info!("  Target response size: {} bytes", target_response_bytes);
     info!("  Max rounds: {}", max_rounds);
@@ -101,76 +107,87 @@ async fn main() -> anyhow::Result<()> {
     let mut success_count = 0;
     let mut failure_count = 0;
 
-    // Iterate over all model presets
-    for model_preset in &model_presets {
-        info!("══════════════════════════════════════════════════════════════");
-        info!(
-            "Model: {} ({}:{})",
-            model_preset.name, model_preset.domain, model_preset.port
-        );
+    // Outer loop: repetitions (run full suite N times)
+    for rep in 1..=repetitions {
+        if repetitions > 1 {
+            info!("▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓");
+            info!("Repetition {}/{}", rep, repetitions);
+        }
 
-        let api_provider = model_preset.build_api_provider();
+        // Iterate over all model presets
+        for model_preset in &model_presets {
+            info!("══════════════════════════════════════════════════════════════");
+            info!(
+                "Model: {} ({}:{})",
+                model_preset.name, model_preset.domain, model_preset.port
+            );
 
-        let prove_config = ProveConfig::builder()
-            .provider(api_provider)
-            .model_id(&model_preset.model_id)
-            .max_request_bytes(target_request_bytes)
-            .max_response_bytes(target_response_bytes)
-            .expected_exchanges(max_rounds as u32)
-            .build()
-            .context("Failed to build ProveConfig")?;
+            let api_provider = model_preset.build_api_provider();
 
-        // Iterate over all prover presets
-        for prover_preset in &prover_presets {
-            // Run with each notary preset (if not required, only run first)
-            for notary_preset in &notary_presets {
-                info!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
-                info!(
-                    "Running: {} / {} ({})",
-                    model_preset.name,
-                    prover_preset.name,
-                    if prover_preset.requires_notary() {
-                        notary_preset.name
-                    } else {
-                        "no notary"
+            let prove_config = ProveConfig::builder()
+                .provider(api_provider)
+                .model_id(&model_preset.model_id)
+                .max_request_bytes(target_request_bytes)
+                .max_response_bytes(target_response_bytes)
+                .expected_exchanges(max_rounds as u32)
+                .build()
+                .context("Failed to build ProveConfig")?;
+
+            // Iterate over all prover presets
+            for prover_preset in &prover_presets {
+                // Run with each notary preset (if not required, only run first)
+                for notary_preset in &notary_presets {
+                    info!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+                    info!(
+                        "Running: {} / {} ({})",
+                        model_preset.name,
+                        prover_preset.name,
+                        if prover_preset.requires_notary() {
+                            notary_preset.name
+                        } else {
+                            "no notary"
+                        }
+                    );
+
+                    let mut notary_preset = (*notary_preset).clone();
+                    if let Some(overwrite) = notary_max_recv_overwrite {
+                        notary_preset.max_recv_bytes = overwrite;
                     }
-                );
-
-                let mut notary_preset = (*notary_preset).clone();
-                if let Some(overwrite) = notary_max_recv_overwrite {
-                    notary_preset.max_recv_bytes = overwrite;
-                }
-                if let Some(overwrite) = notary_max_send_overwrite {
-                    notary_preset.max_sent_bytes = overwrite;
-                }
-
-                let prover = prover_preset.build(&notary_preset);
-
-                match run_benchmark(&benchmark_config, &prove_config, prover).await {
-                    Ok(path) => {
-                        info!("Completed: {}", path.display());
-                        success_count += 1;
+                    if let Some(overwrite) = notary_max_send_overwrite {
+                        notary_preset.max_sent_bytes = overwrite;
                     }
-                    Err(e) => {
-                        error!(
-                            "Failed {} / {} + {}: {}",
-                            model_preset.name, prover_preset.name, notary_preset.name, e
-                        );
-                        failure_count += 1;
-                        debug!("Error details: {:?}", e.chain().collect::<Vec<_>>());
-                    }
-                }
 
-                if !prover_preset.requires_notary() {
-                    // If the prover does not require a notary, skip further notary presets
-                    break;
+                    let prover = prover_preset.build(&notary_preset);
+
+                    match run_benchmark(&benchmark_config, &prove_config, prover).await {
+                        Ok(path) => {
+                            info!("Completed: {}", path.display());
+                            success_count += 1;
+                        }
+                        Err(e) => {
+                            error!(
+                                "Failed {} / {} + {}: {}",
+                                model_preset.name, prover_preset.name, notary_preset.name, e
+                            );
+                            failure_count += 1;
+                            debug!("Error details: {:?}", e.chain().collect::<Vec<_>>());
+                        }
+                    }
+
+                    if !prover_preset.requires_notary() {
+                        // If the prover does not require a notary, skip further notary presets
+                        break;
+                    }
                 }
             }
         }
     }
 
     info!("══════════════════════════════════════════════════════════════");
-    info!("Benchmark run complete: {success_count} succeeded, {failure_count} failed");
+    info!(
+        "Benchmark run complete: {} repetition(s), {success_count} succeeded, {failure_count} failed",
+        repetitions
+    );
 
     if failure_count > 0 {
         anyhow::bail!("{failure_count} benchmark(s) failed");
