@@ -60,8 +60,8 @@ impl BenchmarkInputSource {
 
         // Core instruction that the model should follow
         let instruction = format!(
-            "Task #{round}: Write a detailed response of at least {words} words about technology, \
-             innovation, and the future of computing. Be thorough and expansive in your answer.",
+            "Task #{round}: Write a detailed, thorough and expansive response of at least {words}\
+            words about the future of computing.",
             round = self.round + 1,
             words = words_to_request,
         );
