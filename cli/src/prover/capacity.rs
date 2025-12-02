@@ -227,6 +227,8 @@ pub fn estimate_single_shot_capacity(
     );
     let new_config = NotaryConfig {
         max_total_sent: send_capacity,
+        max_total_recv: recv_capacity,
+        max_decrypted_online: recv_capacity,
         ..base_config.clone()
     };
 
