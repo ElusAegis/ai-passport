@@ -1,6 +1,6 @@
 //! Notary presets for automated benchmarking.
 
-use ai_passport::{NotaryConfig, NotaryMode};
+use ai_passport::{NetworkSetting, NotaryConfig, NotaryMode};
 use dotenvy::var;
 
 const KIB: usize = 1024;
@@ -22,6 +22,8 @@ pub struct NotaryPreset {
     pub max_sent_bytes: usize,
     /// Maximum bytes that can be received.
     pub max_recv_bytes: usize,
+    /// Network optimization strategy.
+    pub network_optimization: NetworkSetting,
 }
 
 impl NotaryPreset {
@@ -36,8 +38,18 @@ impl NotaryPreset {
             .max_total_recv(self.max_recv_bytes)
             .max_decrypted_online(self.max_recv_bytes)
             .defer_decryption(false)
+            .network_optimization(self.network_optimization)
             .build()
             .expect("Failed to build NotaryConfig from preset")
+    }
+}
+
+/// Parse a network setting from string.
+pub fn parse_network_setting(s: &str) -> Option<NetworkSetting> {
+    match s.to_lowercase().as_str() {
+        "latency" | "lt" | "low-latency" => Some(NetworkSetting::Latency),
+        "bandwidth" | "bw" | "throughput" | "tp" => Some(NetworkSetting::Bandwidth),
+        _ => None,
     }
 }
 
@@ -50,9 +62,10 @@ pub const NOTARY_LOCAL: NotaryPreset = NotaryPreset {
     mode: NotaryMode::RemoteNonTLS,
     max_sent_bytes: 64 * KIB,
     max_recv_bytes: 64 * KIB,
+    network_optimization: NetworkSetting::Bandwidth,
 };
 
-/// Local notary preset (localhost:7047, no TLS).
+/// Remote notary preset (notary.proof-of-autonomy.elusaegis.xyz:7047, TLS).
 pub const NOTARY_REMOTE: NotaryPreset = NotaryPreset {
     name: "notary-remote",
     domain: "notary.proof-of-autonomy.elusaegis.xyz",
@@ -61,6 +74,7 @@ pub const NOTARY_REMOTE: NotaryPreset = NotaryPreset {
     mode: NotaryMode::RemoteTLS,
     max_sent_bytes: 64 * KIB,
     max_recv_bytes: 64 * KIB,
+    network_optimization: NetworkSetting::Bandwidth,
 };
 
 /// PSE notary preset (notary.pse.dev:443, TLS).
@@ -72,6 +86,7 @@ pub const NOTARY_PSE: NotaryPreset = NotaryPreset {
     mode: NotaryMode::RemoteTLS,
     max_sent_bytes: 4 * KIB,
     max_recv_bytes: 16 * KIB,
+    network_optimization: NetworkSetting::Bandwidth,
 };
 
 /// All static notary presets.

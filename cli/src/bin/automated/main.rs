@@ -33,6 +33,8 @@
 //!   (e.g., "notary-local,notary-pse"). If not set, all presets are used.
 //! - `NOTARY_MAX_RECV_OVERWRITE` (optional): Override max receive bytes for notary
 //! - `NOTARY_MAX_SEND_OVERWRITE` (optional): Override max send bytes for notary
+//! - `NOTARY_NETWORK_OPTIMIZATION_OVERWRITE` (optional): Override network optimization
+//!   ("bandwidth" or "latency")
 //!
 //! # Output
 //!
@@ -49,10 +51,10 @@ mod stats;
 use ai_passport::ProveConfig;
 use anyhow::Context;
 use dotenvy::var;
-use presets::{load_model_presets, load_notary_presets, load_prover_presets};
+use presets::{load_model_presets, load_notary_presets, load_prover_presets, parse_network_setting};
 use results::BenchmarkConfig;
 use runner::run_benchmark;
-use tracing::{debug, error, info};
+use tracing::{debug, error, info, warn};
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
@@ -85,6 +87,18 @@ async fn main() -> anyhow::Result<()> {
         .map(|v| v.parse::<usize>().ok())
         .ok()
         .flatten();
+    let notary_network_optimization_overwrite = var("NOTARY_NETWORK_OPTIMIZATION_OVERWRITE")
+        .ok()
+        .and_then(|v| {
+            let parsed = parse_network_setting(&v);
+            if parsed.is_none() {
+                warn!(
+                    "Invalid NOTARY_NETWORK_OPTIMIZATION_OVERWRITE '{}', expected 'bandwidth' or 'latency'",
+                    v
+                );
+            }
+            parsed
+        });
 
     // Load presets from environment or use all
     let model_presets = load_model_presets();
@@ -155,6 +169,9 @@ async fn main() -> anyhow::Result<()> {
                     }
                     if let Some(overwrite) = notary_max_send_overwrite {
                         notary_preset.max_sent_bytes = overwrite;
+                    }
+                    if let Some(overwrite) = notary_network_optimization_overwrite {
+                        notary_preset.network_optimization = overwrite;
                     }
 
                     let prover = prover_preset.build(&notary_preset);
