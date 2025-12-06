@@ -18,8 +18,8 @@ use crate::providers::Provider;
 use anyhow::Result;
 use tracing::debug;
 
-/// Buffer factor for safety margin (10% extra).
-const BUFFER_FACTOR: f64 = 1.3;
+/// Buffer factor for safety margin (50% extra).
+const BUFFER_FACTOR: f64 = 1.5;
 
 /// Estimate the required notary configuration for a specific round in per-message mode.
 ///
