@@ -18,8 +18,8 @@ use crate::providers::Provider;
 use anyhow::Result;
 use tracing::debug;
 
-/// Buffer factor for safety margin (50% extra).
-const BUFFER_FACTOR: f64 = 1.5;
+/// Buffer factor for safety margin (20% extra).
+const BUFFER_FACTOR: f64 = 1.2;
 
 /// Estimate the required notary configuration for a specific round in per-message mode.
 ///
@@ -173,6 +173,8 @@ pub fn estimate_single_shot_capacity(
             "expected_exchanges must be at least 1 for single-shot mode"
         ));
     }
+
+    let n = n + 1; // Account for a safety margin of one extra exchange
 
     // Get overhead estimates for the provider based on expected sizes
     let expected_overhead = prove_config.provider.expected_overhead();
