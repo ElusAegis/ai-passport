@@ -56,7 +56,10 @@ pub async fn run_benchmark(
             &prove_config,
             prover,
             &stats,
-            e.to_string(),
+            e.chain()
+                .map(|c| c.to_string())
+                .collect::<Vec<String>>()
+                .join(" | "),
         ),
     };
 
