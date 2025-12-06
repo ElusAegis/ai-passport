@@ -126,7 +126,7 @@ async fn main() -> anyhow::Result<()> {
     // Request timeout (default 10 seconds for automated benchmarks)
     let request_timeout_secs: u64 = var("REQUEST_TIMEOUT_SECS")
         .map(|v| v.parse::<u64>())
-        .unwrap_or(Ok(10))?;
+        .unwrap_or(Ok(30))?;
     let request_timeout = Duration::from_secs(request_timeout_secs);
 
     // Load presets from environment or use all

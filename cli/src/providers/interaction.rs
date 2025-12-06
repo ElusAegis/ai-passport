@@ -9,6 +9,7 @@ use crate::providers::message::ChatMessage;
 use crate::providers::Provider;
 use crate::ui::io_input::get_new_user_message;
 use crate::ui::spinner::with_spinner_future;
+use crate::utils::with_optional_timeout;
 use crate::BYTES_PER_TOKEN;
 use anyhow::{Context, Result};
 use http_body_util::BodyExt;
@@ -16,23 +17,7 @@ use hyper::client::conn::http1::SendRequest;
 use hyper::header::{ACCEPT_ENCODING, CONNECTION, CONTENT_TYPE, HOST, TRANSFER_ENCODING};
 use hyper::{Method, Request, StatusCode};
 use serde_json::Value;
-use std::future::Future;
-use std::time::Duration;
 use tracing::{debug, trace};
-
-/// Wraps a future with an optional timeout.
-/// If `timeout` is `None`, the future runs without a timeout.
-async fn with_optional_timeout<F, T>(future: F, timeout: Option<Duration>) -> Result<T>
-where
-    F: Future<Output = Result<T>>,
-{
-    match timeout {
-        Some(duration) => tokio::time::timeout(duration, future)
-            .await
-            .map_err(|_| anyhow::anyhow!("Request timed out after {:?}", duration))?,
-        None => future.await,
-    }
-}
 
 /// Execute a single interaction round (user input -> model response).
 ///

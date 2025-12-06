@@ -17,6 +17,7 @@ use crate::tlsn::notarise::notarise_session;
 use crate::tlsn::save_proof::save_to_file;
 use crate::tlsn::setup::setup;
 use crate::ui::user_messages::display_proofs;
+use crate::utils::with_optional_timeout;
 use crate::ChatMessage;
 use anyhow::{Context, Result};
 use async_trait::async_trait;
@@ -59,6 +60,7 @@ impl Prover for TlsPerMessageProver {
         let mut budget = ChannelBudget::from_config(&self.notary, config);
 
         // Helper to spawn a notary setup for a given lookahead
+        let setup_timeout = config.request_timeout;
         let spawn_setup = |messages: &[ChatMessage], budget: &ChannelBudget, lookahead| {
             let domain = domain.clone();
             let notary_config = estimate_per_message_capacity(
@@ -71,9 +73,12 @@ impl Prover for TlsPerMessageProver {
             Ok::<_, anyhow::Error>(tokio::spawn(async move {
                 if lookahead > 1 {
                     // Sleep for 50ms to allow previous setup to progress
-                    tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+                    tokio::time::sleep(tokio::time::Duration::from_millis(50)).await;
                 }
-                (setup(&notary_config, &domain, port).await, notary_config)
+                let setup_result =
+                    with_optional_timeout(setup(&notary_config, &domain, port), setup_timeout)
+                        .await;
+                (setup_result, notary_config)
             }))
         };
 

@@ -5,6 +5,7 @@ mod prover;
 mod providers;
 mod tlsn;
 mod ui;
+pub mod utils;
 mod verify;
 
 pub use app::run;
