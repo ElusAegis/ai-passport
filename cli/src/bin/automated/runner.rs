@@ -16,6 +16,7 @@ pub async fn run_benchmark(
     benchmark_config: &BenchmarkConfig,
     prove_config: &ProveConfig,
     prover: AgentProver,
+    file_prefix: Option<&str>,
 ) -> Result<PathBuf> {
     let target_request_bytes = benchmark_config.target_request_bytes;
     let target_response_bytes = benchmark_config.target_response_bytes;
@@ -63,7 +64,7 @@ pub async fn run_benchmark(
         ),
     };
 
-    let path = save_record(&record)?;
+    let path = save_record(&record, file_prefix)?;
 
     // Propagate the original error if the benchmark failed
     result?;

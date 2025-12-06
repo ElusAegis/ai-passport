@@ -39,7 +39,8 @@
 //! - `NOTARY_MAX_SEND_OVERWRITE` (optional): Override max send bytes for notary
 //! - `NOTARY_NETWORK_OPTIMIZATION_OVERWRITE` (optional): Override network optimization
 //!   ("bandwidth" or "latency")
-//! - `REQUEST_TIMEOUT_SECS` (optional, default: 10): Timeout in seconds for each API request
+//! - `REQUEST_TIMEOUT_SECS` (optional, default: 30): Timeout in seconds for each API request
+//! - `BENCHMARK_FILE_PREFIX` (optional): Prefix for output file names (e.g., "test_" produces "test_provider_model_....jsonl")
 //!
 //! # Output
 //!
@@ -123,11 +124,14 @@ async fn main() -> anyhow::Result<()> {
             parsed
         });
 
-    // Request timeout (default 10 seconds for automated benchmarks)
+    // Request timeout (default 30 seconds for automated benchmarks)
     let request_timeout_secs: u64 = var("REQUEST_TIMEOUT_SECS")
         .map(|v| v.parse::<u64>())
         .unwrap_or(Ok(30))?;
     let request_timeout = Duration::from_secs(request_timeout_secs);
+
+    // File prefix for output files
+    let file_prefix = var("BENCHMARK_FILE_PREFIX").ok();
 
     // Load presets from environment or use all
     let model_presets = load_model_presets();
@@ -238,7 +242,7 @@ async fn main() -> anyhow::Result<()> {
 
                         let prover = prover_preset.build(&notary_preset);
 
-                        match run_benchmark(&benchmark_config, &prove_config, prover).await {
+                        match run_benchmark(&benchmark_config, &prove_config, prover, file_prefix.as_deref()).await {
                             Ok(path) => {
                                 info!("Completed: {}", path.display());
                                 success_count += 1;

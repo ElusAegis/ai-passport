@@ -138,11 +138,11 @@ impl BenchmarkRecord {
 
 /// Generate the JSONL filename for a benchmark record.
 ///
-/// Format: `{provider}_{model}_{messages}_{req_bytes}_{resp_bytes}.jsonl`
+/// Format: `{prefix}{provider}_{model}_{messages}_{req_bytes}_{resp_bytes}.jsonl`
 /// Failed benchmarks get `_failed` suffix to keep them separate.
 ///
 /// This groups benchmark results by their unique configuration.
-pub fn generate_filename(record: &BenchmarkRecord) -> String {
+pub fn generate_filename(record: &BenchmarkRecord, prefix: Option<&str>) -> String {
     // Sanitize components for filesystem safety
     let provider = record
         .provider_name
@@ -152,8 +152,9 @@ pub fn generate_filename(record: &BenchmarkRecord) -> String {
     let req_bytes = record.benchmark.target_request_bytes;
     let resp_bytes = record.benchmark.target_response_bytes;
     let failed_suffix = if record.success { "" } else { "_failed" };
+    let prefix_str = prefix.unwrap_or("");
 
-    format!("{provider}_{model}_{messages}_{req_bytes}_{resp_bytes}{failed_suffix}.jsonl",)
+    format!("{prefix_str}{provider}_{model}_{messages}_{req_bytes}_{resp_bytes}{failed_suffix}.jsonl",)
 }
 
 /// Get the benchmarks directory, creating it if necessary.
@@ -166,9 +167,9 @@ pub fn benchmarks_dir() -> Result<PathBuf> {
 }
 
 /// Append a benchmark record to the appropriate JSONL file.
-pub fn save_record(record: &BenchmarkRecord) -> Result<PathBuf> {
+pub fn save_record(record: &BenchmarkRecord, file_prefix: Option<&str>) -> Result<PathBuf> {
     let dir = benchmarks_dir()?;
-    let filename = generate_filename(record);
+    let filename = generate_filename(record, file_prefix);
     let path = dir.join(&filename);
 
     let json_line =
