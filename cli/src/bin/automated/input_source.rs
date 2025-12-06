@@ -60,14 +60,14 @@ impl BenchmarkInputSource {
 
         // Core instruction that the model should follow
         let instruction = format!(
-            "Task #{round}: Write a detailed, thorough and expansive response of at least {words}\
+            "Task #{round}: Write a detailed response of at least {words}\
             words about the future of computing.",
             round = self.round + 1,
             words = words_to_request,
         );
 
         // Separator marking the end of the real prompt
-        let separator = "\n\n--- PADDING BELOW (ignore, used for message size calibration) ---\n\n";
+        let separator = "\n\n--- PADDING BELOW (ignore) ---\n\n";
 
         let prefix = format!("{}{}", instruction, separator);
         let prefix_len = prefix.len() as u32;
