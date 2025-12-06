@@ -50,10 +50,10 @@ pub async fn run_benchmark(
 
     // Create and save record
     let record = match &result {
-        Ok(()) => BenchmarkRecord::from_stats(benchmark_config, &prove_config, prover, &stats),
+        Ok(()) => BenchmarkRecord::from_stats(benchmark_config, prove_config, prover, &stats),
         Err(e) => BenchmarkRecord::failed(
             benchmark_config,
-            &prove_config,
+            prove_config,
             prover,
             &stats,
             e.chain()
