@@ -161,7 +161,7 @@ async fn main() -> anyhow::Result<()> {
 
         // Iterate over max_rounds configurations
         for &max_rounds in &max_rounds_list {
-            let is_largest_rounds = max_rounds == max_rounds_largest && max_rounds_list.len() > 1;
+            let is_largest_rounds = max_rounds == max_rounds_largest;
 
             if max_rounds_list.len() > 1 {
                 info!("▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒");
@@ -202,18 +202,12 @@ async fn main() -> anyhow::Result<()> {
                     .build()
                     .context("Failed to build ProveConfig")?;
 
-                // Iterate over all prover presets
-                // For the largest max_rounds, only use direct prover
-                let active_provers: Vec<_> = if is_largest_rounds {
-                    prover_presets
-                        .iter()
-                        .filter(|p| !p.requires_notary())
-                        .collect()
-                } else {
-                    prover_presets.iter().collect()
-                };
+                for prover_preset in &prover_presets {
+                    // Direct prover only runs on the largest round
+                    if !prover_preset.requires_notary() && !is_largest_rounds {
+                        continue;
+                    }
 
-                for prover_preset in active_provers {
                     // Run with each notary preset (if not required, only run first)
                     for notary_preset in &notary_presets {
                         info!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
