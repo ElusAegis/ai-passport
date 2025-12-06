@@ -129,6 +129,31 @@ const MODEL_PHALA_HAIKU: StaticModelPreset = StaticModelPreset::new(
     "claude-haiku-4-5-20251001",
 );
 
+const MODEL_PHALA_GPT_4O: StaticModelPreset = StaticModelPreset::new(
+    "phala-openai-gpt-4o",
+    "REDPILL_API_KEY",
+    "api.red-pill.ai",
+    443,
+    "gpt-4o",
+);
+
+// Mistral presets
+const MODEL_MISTRAL_8B: StaticModelPreset = StaticModelPreset::new(
+    "mistral-8b",
+    "MISTRAL_API_KEY",
+    "api.mistral.ai",
+    443,
+    "ministral-8b-latest",
+);
+
+const MODEL_MISTRAL_3B: StaticModelPreset = StaticModelPreset::new(
+    "mistral-3b",
+    "MISTRAL_API_KEY",
+    "api.mistral.ai",
+    443,
+    "ministral-3b-latest",
+);
+
 /// All static model presets.
 const STATIC_MODEL_PRESETS: &[StaticModelPreset] = &[
     MODEL_CUSTOM_INSTANT,
@@ -137,6 +162,9 @@ const STATIC_MODEL_PRESETS: &[StaticModelPreset] = &[
     MODEL_ANTHROPIC_SONNET,
     MODEL_ANTHROPIC_OPUS,
     MODEL_PHALA_HAIKU,
+    MODEL_PHALA_GPT_4O,
+    MODEL_MISTRAL_8B,
+    MODEL_MISTRAL_3B,
 ];
 
 // ─────────────────────────────────────────────────────────────────────────────
