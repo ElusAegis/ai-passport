@@ -5,10 +5,12 @@
 
 pub(super) mod capacity;
 mod direct;
+mod proxy;
 mod tls_per_message;
 mod tls_single_shot;
 
 pub use direct::DirectProver;
+pub use proxy::{ProxyConfig, ProxyProver};
 pub use tls_per_message::TlsPerMessageProver;
 pub use tls_single_shot::TlsSingleShotProver;
 
@@ -37,6 +39,8 @@ pub trait Prover: Send + Sync {
 pub enum ProverKind {
     /// Direct passthrough, no proving
     Direct,
+    /// Proxy-based attestation
+    Proxy,
     /// Single TLS session, proof at end
     TlsSingleShot,
     /// Fresh TLS per message, proof per message
@@ -51,6 +55,7 @@ pub enum ProverKind {
 #[strum(serialize_all = "snake_case")]
 pub enum AgentProver {
     Direct(DirectProver),
+    Proxy(ProxyProver),
     TlsSingleShot(TlsSingleShotProver),
     TlsPerMessage(TlsPerMessageProver),
 }
@@ -60,6 +65,7 @@ impl Prover for AgentProver {
     async fn run(&self, config: &ProveConfig) -> Result<()> {
         match self {
             Self::Direct(p) => p.run(config).await,
+            Self::Proxy(p) => p.run(config).await,
             Self::TlsSingleShot(p) => p.run(config).await,
             Self::TlsPerMessage(p) => p.run(config).await,
         }
@@ -72,6 +78,9 @@ impl TryFrom<ProveArgs> for AgentProver {
     fn try_from(args: ProveArgs) -> Result<Self, Self::Error> {
         match args.prover {
             ProverKind::Direct => Ok(Self::Direct(DirectProver::new())),
+            ProverKind::Proxy => {
+                Ok(Self::Proxy(ProxyProver::new(args.proxy.into())))
+            }
             ProverKind::TlsSingleShot => {
                 let notary = args
                     .notary

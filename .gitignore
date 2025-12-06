@@ -9,3 +9,4 @@ _interaction_proof_*.json
 model-server/cert/*
 /notary/tls/
 /benchmarks/*
+/attestations/*

@@ -1,5 +1,5 @@
 use crate::config::notary::NotaryMode;
-use crate::prover::ProverKind;
+use crate::prover::{ProverKind, ProxyConfig};
 use crate::NotaryConfig;
 use clap::ValueHint;
 use clap::{Args, Parser, Subcommand};
@@ -18,6 +18,10 @@ pub const DEFAULT_NOTARY_DOMAIN: &str = "notary.pse.dev";
 pub const DEFAULT_NOTARY_VERSION: &str = "v0.1.0-alpha.12";
 pub const DEFAULT_NOTARY_PORT: u16 = 443;
 pub const DEFAULT_NETWORK_OPTIMIZATION: &str = "latency";
+
+// Proxy defaults
+pub const DEFAULT_PROXY_HOST: &str = "localhost";
+pub const DEFAULT_PROXY_PORT: u16 = 8443;
 
 #[derive(Parser)]
 #[command(author, version, about)]
@@ -43,7 +47,7 @@ pub struct NotaryArgs {
     /// remote_non_tls: use a remote notary server without TLS.
     /// ephemeral: use an ephemeral notary server that spins up locally.
     #[arg(
-        long,
+        long = "notary-type",
         env = "NOTARY_TYPE",
         value_parser = parse_notary_type,
         default_value = DEFAULT_NOTARY_TYPE,
@@ -52,7 +56,8 @@ pub struct NotaryArgs {
 
     /// Notary server domain
     #[arg(
-        long,
+        id = "notary_domain",
+        long = "notary-domain",
         env = "NOTARY_DOMAIN",
         value_hint = ValueHint::Hostname,
         default_value = DEFAULT_NOTARY_DOMAIN,
@@ -61,7 +66,7 @@ pub struct NotaryArgs {
 
     /// Notary API version prefix
     #[arg(
-        long,
+        long = "notary-version",
         env = "NOTARY_VERSION",
         value_hint = ValueHint::Other,
         default_value = DEFAULT_NOTARY_VERSION
@@ -70,7 +75,8 @@ pub struct NotaryArgs {
 
     /// Notary server port
     #[arg(
-        long,
+        id = "notary_port",
+        long = "notary-port",
         env = "NOTARY_PORT",
         value_hint = ValueHint::Other,
         default_value_t = DEFAULT_NOTARY_PORT
@@ -79,8 +85,8 @@ pub struct NotaryArgs {
 
     /// Network optimization strategy (latency | bandwidth)
     #[arg(
-        long,
-        env = "NETWORK_OPTIMIZATION",
+        long = "notary-network-optimization",
+        env = "NOTARY_NETWORK_OPTIMIZATION",
         value_parser = parse_network_setting,
         default_value = DEFAULT_NETWORK_OPTIMIZATION
     )]
@@ -88,16 +94,16 @@ pub struct NotaryArgs {
 
     /// Maximum bytes to send over the TLS session
     #[arg(
-        long,
-        env = "MAX_SENT_BYTES",
+        long = "notary-max-sent-bytes",
+        env = "NOTARY_MAX_SENT_BYTES",
         default_value_t = DEFAULT_MAX_SENT_BYTES
     )]
     pub max_sent_bytes: usize,
 
     /// Maximum bytes to receive over the TLS session
     #[arg(
-        long,
-        env = "MAX_RECV_BYTES",
+        long = "notary-max-recv-bytes",
+        env = "NOTARY_MAX_RECV_BYTES",
         default_value_t = DEFAULT_MAX_RECV_BYTES
     )]
     pub max_recv_bytes: usize,
@@ -119,6 +125,39 @@ impl TryFrom<NotaryArgs> for NotaryConfig {
             .max_total_sent(args.max_sent_bytes)
             .build()
             .map_err(Into::into)
+    }
+}
+
+/// Proxy server configuration (only used with proxy prover)
+#[derive(Args, Clone, Debug)]
+pub struct ProxyArgs {
+    /// Proxy server host
+    #[arg(
+        id = "proxy_host",
+        long = "proxy-host",
+        env = "PROXY_HOST",
+        value_hint = ValueHint::Hostname,
+        default_value = DEFAULT_PROXY_HOST
+    )]
+    pub host: String,
+
+    /// Proxy server port
+    #[arg(
+        id = "proxy_port",
+        long = "proxy-port",
+        env = "PROXY_PORT",
+        value_hint = ValueHint::Other,
+        default_value_t = DEFAULT_PROXY_PORT
+    )]
+    pub port: u16,
+}
+
+impl From<ProxyArgs> for ProxyConfig {
+    fn from(args: ProxyArgs) -> Self {
+        ProxyConfig {
+            host: args.host,
+            port: args.port,
+        }
     }
 }
 
@@ -148,6 +187,7 @@ pub(crate) struct ProveArgs {
 
     /// Prover type to use for generating proofs.
     /// - direct: passthrough without proving (for testing)
+    /// - proxy: connect through attestation proxy server
     /// - tls-single: single TLS session, one proof at end
     /// - tls-per-message: fresh TLS per message, proof per message
     #[arg(
@@ -157,6 +197,10 @@ pub(crate) struct ProveArgs {
         default_value = DEFAULT_PROVER
     )]
     pub(crate) prover: ProverKind,
+
+    /// Proxy configuration (only used with proxy prover)
+    #[command(flatten)]
+    pub(crate) proxy: ProxyArgs,
 
     /// Notary configuration (only used with TLS provers)
     #[command(flatten)]
@@ -183,13 +227,14 @@ fn parse_prover_kind(s: &str) -> Result<ProverKind, String> {
     match s.trim().to_ascii_lowercase().as_str() {
         // New names
         "direct" | "passthrough" | "none" => Ok(ProverKind::Direct),
+        "proxy" => Ok(ProverKind::Proxy),
         "tls-single" | "tls-single-shot" => Ok(ProverKind::TlsSingleShot),
         "tls-per-message" | "tls-multi" => Ok(ProverKind::TlsPerMessage),
         // Backwards-compatible aliases for old --session-mode values
         "single" => Ok(ProverKind::TlsSingleShot),
         "multi" => Ok(ProverKind::TlsPerMessage),
         other => Err(format!(
-            "invalid PROVER '{}'; expected one of: direct, tls-single, tls-per-message (aliases: single, multi)",
+            "invalid PROVER '{}'; expected one of: direct, proxy, tls-single, tls-per-message (aliases: single, multi)",
             other
         )),
     }

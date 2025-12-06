@@ -89,7 +89,7 @@ impl Prover for TlsSingleShotProver {
 
         // 6) Save the proof
         let file_path = save_to_file(
-            &format!("{}_single_shot_proof", config.model_id),
+            &format!("tls_{}_single_shot", config.model_id),
             &attestation,
             &config.provider,
             &secrets,

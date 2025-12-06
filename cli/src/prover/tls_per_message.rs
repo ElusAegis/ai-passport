@@ -124,7 +124,7 @@ impl Prover for TlsPerMessageProver {
             let current_exchanges = (all_messages.len() / 2) as u32; // Each exchange is 2 messages
             stored_proofs.push(save_to_file(
                 &format!(
-                    "{}_part_{current_exchanges}_per_message_proof",
+                    "tls_{}_part_{current_exchanges}_per_message",
                     config.model_id
                 ),
                 &attestation,
