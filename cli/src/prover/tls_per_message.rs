@@ -71,7 +71,7 @@ impl Prover for TlsPerMessageProver {
             Ok::<_, anyhow::Error>(tokio::spawn(async move {
                 if lookahead > 1 {
                     // Sleep for 50ms to allow previous setup to progress
-                    tokio::time::sleep(std::time::Duration::from_millis(150)).await;
+                    tokio::time::sleep(std::time::Duration::from_millis(50)).await;
                 }
                 (setup(&notary_config, &domain, port).await, notary_config)
             }))
