@@ -12,7 +12,8 @@ pub use app::run;
 pub use config::notary::{NotaryConfig, NotaryMode};
 pub use config::ProveConfig;
 pub use prover::{
-    AgentProver, DirectProver, Prover, ProverKind, TlsPerMessageProver, TlsSingleShotProver,
+    AgentProver, DirectProver, Prover, ProverKind, ProxyConfig, ProxyProver, TlsPerMessageProver,
+    TlsSingleShotProver,
 };
 pub use providers::{
     budget::ChannelBudget, budget::BYTES_PER_TOKEN, message::ChatMessage, ApiProvider,

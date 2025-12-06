@@ -1,6 +1,6 @@
 //! Prover presets for automated benchmarking.
 
-use ai_passport::{AgentProver, DirectProver, TlsPerMessageProver, TlsSingleShotProver};
+use ai_passport::{AgentProver, DirectProver, ProxyConfig, ProxyProver, TlsPerMessageProver, TlsSingleShotProver};
 use dotenvy::var;
 
 use super::notary::NotaryPreset;
@@ -21,7 +21,7 @@ impl ProverPreset {
 
     /// Whether this prover requires a notary.
     pub fn requires_notary(&self) -> bool {
-        !matches!(self.name, "direct")
+        !matches!(self.name, "direct" | "proxy" | "proxy_tee")
     }
 }
 
@@ -29,6 +29,30 @@ impl ProverPreset {
 pub const PROVER_DIRECT: ProverPreset = ProverPreset {
     name: "direct",
     build_fn: |_| AgentProver::Direct(DirectProver::new()),
+};
+
+/// Proxy prover preset (proxy.proof-of-autonomy.elusaegis.xyz:8443).
+pub const PROVER_PROXY: ProverPreset = ProverPreset {
+    name: "proxy",
+    build_fn: |_| {
+        let config = ProxyConfig {
+            host: "proxy.proof-of-autonomy.elusaegis.xyz".to_string(),
+            port: 8443,
+        };
+        AgentProver::Proxy(ProxyProver::new(config))
+    },
+};
+
+/// Proxy TEE prover preset (proxy-tee.proof-of-autonomy.elusaegis.xyz:8443).
+pub const PROVER_PROXY_TEE: ProverPreset = ProverPreset {
+    name: "proxy_tee",
+    build_fn: |_| {
+        let config = ProxyConfig {
+            host: "proxy-tee.proof-of-autonomy.elusaegis.xyz".to_string(),
+            port: 8443,
+        };
+        AgentProver::Proxy(ProxyProver::new(config))
+    },
 };
 
 /// TLS Single-Shot prover preset (single TLS session, proof at end).
@@ -50,8 +74,13 @@ pub const PROVER_TLS_PER_MESSAGE: ProverPreset = ProverPreset {
 };
 
 /// All static prover presets.
-const STATIC_PROVER_PRESETS: &[&ProverPreset] =
-    &[&PROVER_DIRECT, &PROVER_TLS_SINGLE, &PROVER_TLS_PER_MESSAGE];
+const STATIC_PROVER_PRESETS: &[&ProverPreset] = &[
+    &PROVER_DIRECT,
+    &PROVER_PROXY,
+    &PROVER_PROXY_TEE,
+    &PROVER_TLS_SINGLE,
+    &PROVER_TLS_PER_MESSAGE,
+];
 
 /// Get all available prover presets.
 pub fn all_prover_presets() -> Vec<&'static ProverPreset> {
