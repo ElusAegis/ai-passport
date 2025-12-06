@@ -8,6 +8,7 @@ use crate::ApiProvider;
 use anyhow::Context;
 use derive_builder::Builder;
 use dialoguer::console::style;
+use std::time::Duration;
 use tracing::info;
 
 #[derive(Builder, Clone)]
@@ -26,6 +27,9 @@ pub struct ProveConfig {
     /// Expected number of message exchanges (user + assistant pairs).
     #[builder(setter(into), default)]
     pub expected_exchanges: Option<u32>,
+    /// Timeout for each API request. None means no timeout.
+    #[builder(setter(into), default)]
+    pub request_timeout: Option<Duration>,
 }
 
 impl ProveConfigBuilder {}

@@ -39,6 +39,7 @@
 //! - `NOTARY_MAX_SEND_OVERWRITE` (optional): Override max send bytes for notary
 //! - `NOTARY_NETWORK_OPTIMIZATION_OVERWRITE` (optional): Override network optimization
 //!   ("bandwidth" or "latency")
+//! - `REQUEST_TIMEOUT_SECS` (optional, default: 10): Timeout in seconds for each API request
 //!
 //! # Output
 //!
@@ -65,6 +66,7 @@ use presets::{
 };
 use results::BenchmarkConfig;
 use runner::run_benchmark;
+use std::time::Duration;
 use tracing::{debug, error, info, warn};
 
 #[tokio::main]
@@ -121,6 +123,12 @@ async fn main() -> anyhow::Result<()> {
             parsed
         });
 
+    // Request timeout (default 10 seconds for automated benchmarks)
+    let request_timeout_secs: u64 = var("REQUEST_TIMEOUT_SECS")
+        .map(|v| v.parse::<u64>())
+        .unwrap_or(Ok(10))?;
+    let request_timeout = Duration::from_secs(request_timeout_secs);
+
     // Load presets from environment or use all
     let model_presets = load_model_presets();
     let prover_presets = load_prover_presets();
@@ -134,6 +142,7 @@ async fn main() -> anyhow::Result<()> {
         "  Max rounds: {:?} (largest: {})",
         max_rounds_list, max_rounds_largest
     );
+    info!("  Request timeout: {}s", request_timeout_secs);
 
     // Track results
     let mut success_count = 0;
@@ -153,7 +162,7 @@ async fn main() -> anyhow::Result<()> {
             if max_rounds_list.len() > 1 {
                 info!("▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒");
                 info!(
-                    "Max rounds: {}{}",
+                    "Interaction rounds: {}{}",
                     max_rounds,
                     if is_largest_rounds {
                         " (direct prover only)"
@@ -185,6 +194,7 @@ async fn main() -> anyhow::Result<()> {
                     .max_request_bytes(target_request_bytes)
                     .max_response_bytes(target_response_bytes)
                     .expected_exchanges(max_rounds as u32)
+                    .request_timeout(request_timeout)
                     .build()
                     .context("Failed to build ProveConfig")?;
 

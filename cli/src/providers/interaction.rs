@@ -16,7 +16,23 @@ use hyper::client::conn::http1::SendRequest;
 use hyper::header::{ACCEPT_ENCODING, CONNECTION, CONTENT_TYPE, HOST, TRANSFER_ENCODING};
 use hyper::{Method, Request, StatusCode};
 use serde_json::Value;
+use std::future::Future;
+use std::time::Duration;
 use tracing::{debug, trace};
+
+/// Wraps a future with an optional timeout.
+/// If `timeout` is `None`, the future runs without a timeout.
+async fn with_optional_timeout<F, T>(future: F, timeout: Option<Duration>) -> Result<T>
+where
+    F: Future<Output = Result<T>>,
+{
+    match timeout {
+        Some(duration) => tokio::time::timeout(duration, future)
+            .await
+            .map_err(|_| anyhow::anyhow!("Request timed out after {:?}", duration))?,
+        None => future.await,
+    }
+}
 
 /// Execute a single interaction round (user input -> model response).
 ///
@@ -58,13 +74,13 @@ pub async fn single_interaction_round(
     trace!("Request: {:?}", request);
     trace!("Sending request to Model's API...");
 
-    // 6) Send request and get response
+    // 6) Send request and get response (with optional timeout)
+    let response_future = with_spinner_future(
+        "processing...",
+        get_response_with_sizes(request_sender, request, config),
+    );
     let (received_assistant_message, response_total_len): (ChatMessage, usize) =
-        with_spinner_future(
-            "processing...",
-            get_response_with_sizes(request_sender, request, config),
-        )
-        .await?;
+        with_optional_timeout(response_future, config.request_timeout).await?;
     let assistant_message_len = serde_json::to_string(&received_assistant_message)
         .expect("Failed to serialize assistant message to calculate its size")
         .len();
