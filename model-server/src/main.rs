@@ -9,8 +9,8 @@
 //! Environment variables:
 //! - `MODEL_API_PORT` (optional, default: 3000): Port to bind to
 //! - `MODEL_API_KEY` (optional): API key for authentication
-//! - `SERVER_TLS_CERT` (required): Path to TLS certificate
-//! - `SERVER_TLS_KEY` (required): Path to TLS private key
+//! - `MODEL_SERVER_TLS_CERT` (required): Path to TLS certificate
+//! - `MODEL_SERVER_TLS_KEY` (required): Path to TLS private key
 
 mod config;
 mod handlers;

@@ -18,8 +18,8 @@ impl Config {
     /// Load configuration from environment variables.
     ///
     /// Required:
-    /// - `SERVER_TLS_CERT`: Path to TLS certificate
-    /// - `SERVER_TLS_KEY`: Path to TLS private key
+    /// - `MODEL_SERVER_TLS_CERT`: Path to TLS certificate
+    /// - `MODEL_SERVER_TLS_KEY`: Path to TLS private key
     ///
     /// Optional:
     /// - `MODEL_API_PORT`: Port to bind to (default: 3000)
@@ -36,8 +36,10 @@ impl Config {
             )
             .parse()?;
         let api_key = env::var("MODEL_API_KEY").ok().filter(|s| !s.is_empty());
-        let cert_path = env::var("SERVER_TLS_CERT").context("SERVER_TLS_CERT must be set")?;
-        let key_path = env::var("SERVER_TLS_KEY").context("SERVER_TLS_KEY must be set")?;
+        let cert_path =
+            env::var("MODEL_SERVER_TLS_CERT").context("MODEL_SERVER_TLS_CERT must be set")?;
+        let key_path =
+            env::var("MODEL_SERVER_TLS_KEY").context("MODEL_SERVER_TLS_KEY must be set")?;
 
         Ok(Self {
             bind_addr,
