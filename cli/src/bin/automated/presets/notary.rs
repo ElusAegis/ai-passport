@@ -62,7 +62,7 @@ pub const NOTARY_LOCAL: NotaryPreset = NotaryPreset {
     mode: NotaryMode::RemoteNonTLS,
     max_sent_bytes: 64 * KIB,
     max_recv_bytes: 64 * KIB,
-    network_optimization: NetworkSetting::Bandwidth,
+    network_optimization: NetworkSetting::Latency,
 };
 
 /// Remote notary preset (notary.proof-of-autonomy.elusaegis.xyz:7047, TLS).
@@ -74,7 +74,7 @@ pub const NOTARY_REMOTE: NotaryPreset = NotaryPreset {
     mode: NotaryMode::RemoteTLS,
     max_sent_bytes: 64 * KIB,
     max_recv_bytes: 64 * KIB,
-    network_optimization: NetworkSetting::Bandwidth,
+    network_optimization: NetworkSetting::Latency,
 };
 
 /// PSE notary preset (notary.pse.dev:443, TLS).
@@ -86,7 +86,7 @@ pub const NOTARY_PSE: NotaryPreset = NotaryPreset {
     mode: NotaryMode::RemoteTLS,
     max_sent_bytes: 4 * KIB,
     max_recv_bytes: 16 * KIB,
-    network_optimization: NetworkSetting::Bandwidth,
+    network_optimization: NetworkSetting::Latency,
 };
 
 /// All static notary presets.
