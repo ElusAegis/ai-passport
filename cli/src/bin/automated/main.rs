@@ -147,6 +147,9 @@ async fn main() -> anyhow::Result<()> {
         max_rounds_list, max_rounds_largest
     );
     info!("  Request timeout: {}s", request_timeout_secs);
+    info!("  Model presets: {}", model_presets.len());
+    info!("  Prover presets: {}", prover_presets.len());
+    info!("  Notary presets: {}", notary_presets.len());
 
     // Track results
     let mut success_count = 0;
@@ -165,15 +168,7 @@ async fn main() -> anyhow::Result<()> {
 
             if max_rounds_list.len() > 1 {
                 info!("▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒");
-                info!(
-                    "Interaction rounds: {}{}",
-                    max_rounds,
-                    if is_largest_rounds {
-                        " (direct prover only)"
-                    } else {
-                        ""
-                    }
-                );
+                info!("Interaction rounds: {}", max_rounds,);
             }
 
             let benchmark_config = BenchmarkConfig {
@@ -203,7 +198,7 @@ async fn main() -> anyhow::Result<()> {
                     .context("Failed to build ProveConfig")?;
 
                 for prover_preset in &prover_presets {
-                    // Direct prover only runs on the largest round
+                    // Non TLSN provers only runs on the largest round
                     if !prover_preset.requires_notary() && !is_largest_rounds {
                         continue;
                     }
@@ -236,7 +231,14 @@ async fn main() -> anyhow::Result<()> {
 
                         let prover = prover_preset.build(&notary_preset);
 
-                        match run_benchmark(&benchmark_config, &prove_config, prover, file_prefix.as_deref()).await {
+                        match run_benchmark(
+                            &benchmark_config,
+                            &prove_config,
+                            prover,
+                            file_prefix.as_deref(),
+                        )
+                        .await
+                        {
                             Ok(path) => {
                                 info!("Completed: {}", path.display());
                                 success_count += 1;
