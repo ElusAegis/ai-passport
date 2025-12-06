@@ -3,6 +3,7 @@ members = ["agent",
     "cli",
     "model-server",
     "notary",
+    "proxy-server",
 ]
 resolver = "2"
 
