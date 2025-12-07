@@ -34,8 +34,8 @@ notarization:
 
 tls:
   enabled: true
-  private_key_path: "tls/key.pem"
-  certificate_path: "tls/cert.pem"
+  private_key_path: "cert/privkey.pem"
+  certificate_path: "cert/cert.pem"
 
 log:
   level: DEBUG
