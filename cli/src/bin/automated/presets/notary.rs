@@ -74,7 +74,19 @@ pub const NOTARY_REMOTE: NotaryPreset = NotaryPreset {
     mode: NotaryMode::RemoteTLS,
     max_sent_bytes: 64 * KIB,
     max_recv_bytes: 64 * KIB,
-    network_optimization: NetworkSetting::Latency,
+    network_optimization: NetworkSetting::Bandwidth,
+};
+
+/// Remote notary preset (notary.proof-of-autonomy.elusaegis.xyz:7047, TLS).
+pub const NOTARY_REMOTE_TEE: NotaryPreset = NotaryPreset {
+    name: "notary-remote-tee",
+    domain: "notary-tee.proof-of-autonomy.elusaegis.xyz",
+    port: 7047,
+    path_prefix: "",
+    mode: NotaryMode::RemoteTLS,
+    max_sent_bytes: 64 * KIB,
+    max_recv_bytes: 64 * KIB,
+    network_optimization: NetworkSetting::Bandwidth,
 };
 
 /// PSE notary preset (notary.pse.dev:443, TLS).
@@ -86,11 +98,16 @@ pub const NOTARY_PSE: NotaryPreset = NotaryPreset {
     mode: NotaryMode::RemoteTLS,
     max_sent_bytes: 4 * KIB,
     max_recv_bytes: 16 * KIB,
-    network_optimization: NetworkSetting::Latency,
+    network_optimization: NetworkSetting::Bandwidth,
 };
 
 /// All static notary presets.
-const STATIC_NOTARY_PRESETS: &[&NotaryPreset] = &[&NOTARY_LOCAL, &NOTARY_PSE, &NOTARY_REMOTE];
+const STATIC_NOTARY_PRESETS: &[&NotaryPreset] = &[
+    &NOTARY_LOCAL,
+    &NOTARY_PSE,
+    &NOTARY_REMOTE,
+    &NOTARY_REMOTE_TEE,
+];
 
 /// Get all available notary presets.
 pub fn all_notary_presets() -> Vec<&'static NotaryPreset> {
