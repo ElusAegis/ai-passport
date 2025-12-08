@@ -39,7 +39,7 @@ pub async fn run_benchmark(
     let input_source_clone = Arc::clone(&input_source);
     let result = with_input_source(
         InputSourceWrapper(input_source_clone),
-        prover.run(&prove_config),
+        prover.run(prove_config),
     )
     .await;
 

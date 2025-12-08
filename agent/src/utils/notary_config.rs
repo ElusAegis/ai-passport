@@ -1,7 +1,10 @@
 use ai_passport::{ApiProvider, ProveConfig};
 use anyhow::Context;
 
-pub(crate) fn gen_cfg(_request_limit: usize, _response_limit: usize) -> anyhow::Result<ProveConfig> {
+pub(crate) fn gen_cfg(
+    _request_limit: usize,
+    _response_limit: usize,
+) -> anyhow::Result<ProveConfig> {
     let domain = "api.proof-of-autonomy.elusaegis.xyz";
 
     let api_provider = ApiProvider::builder()

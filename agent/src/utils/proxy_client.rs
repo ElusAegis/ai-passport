@@ -5,11 +5,11 @@
 //! (e.g., fetching data from Polymarket or price feeds).
 
 use anyhow::{Context, Result};
+use http_body_util::BodyExt;
 use hyper::client::conn::http1::SendRequest;
 use hyper::header::{CONNECTION, HOST};
 use hyper::{Method, Request, StatusCode};
 use hyper_util::rt::TokioIo;
-use http_body_util::BodyExt;
 use rustls::pki_types::ServerName;
 use std::fs;
 use std::path::{Path, PathBuf};

@@ -229,10 +229,14 @@ async fn handle_attestation(
 
     let (transcript, target_host) = {
         let session = session.lock().await;
-        (session.transcript.clone(), session.target_host.clone().unwrap_or_default())
+        (
+            session.transcript.clone(),
+            session.target_host.clone().unwrap_or_default(),
+        )
     };
 
-    let attestation = Attestation::build_and_sign(transcript, target_host, &censor_headers, signing_key);
+    let attestation =
+        Attestation::build_and_sign(transcript, target_host, &censor_headers, signing_key);
 
     match serde_json::to_string_pretty(&attestation) {
         Ok(json) => Response::builder()
@@ -289,7 +293,9 @@ async fn handle_proxy(
     }
 
     // Forward to backend
-    let response = backend.forward(&host, &method, &path, &headers, body_bytes).await?;
+    let response = backend
+        .forward(&host, &method, &path, &headers, body_bytes)
+        .await?;
 
     let status = response.status().as_u16();
     let resp_headers: Vec<(String, String)> = response
@@ -375,15 +381,15 @@ fn load_signing_key(path: &str) -> Result<SigningKey> {
 
     // Try to parse as SEC1 PEM (EC PRIVATE KEY - from openssl ecparam)
     if let Ok(secret_key) = SecretKey::from_sec1_pem(&pem) {
-        return Ok(SigningKey::from_bytes(&secret_key.to_bytes())
-            .context("Failed to convert SEC1 key to signing key")?);
+        return SigningKey::from_bytes(&secret_key.to_bytes())
+            .context("Failed to convert SEC1 key to signing key");
     }
 
     // Try to parse as PKCS8 PEM (PRIVATE KEY)
     use k256::pkcs8::DecodePrivateKey;
     if let Ok(secret_key) = SecretKey::from_pkcs8_pem(&pem) {
-        return Ok(SigningKey::from_bytes(&secret_key.to_bytes())
-            .context("Failed to convert PKCS8 key to signing key")?);
+        return SigningKey::from_bytes(&secret_key.to_bytes())
+            .context("Failed to convert PKCS8 key to signing key");
     }
 
     anyhow::bail!("Failed to parse signing key from {}. Expected SEC1 (EC PRIVATE KEY) or PKCS8 (PRIVATE KEY) PEM format.", path)

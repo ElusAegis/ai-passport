@@ -62,7 +62,7 @@ pub trait Provider {
     }
 
     /// Parse the assistant's content from the response (default: OpenAI-style)
-    fn parse_chat_reply_message<'a>(&self, response: &'a Value) -> Result<ChatMessage> {
+    fn parse_chat_reply_message(&self, response: &Value) -> Result<ChatMessage> {
         let message = response["choices"][0]["message"]
             .as_object()
             .ok_or_else(|| anyhow::anyhow!("Failed to parse assistant message from response"))?;

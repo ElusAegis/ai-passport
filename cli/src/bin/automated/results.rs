@@ -154,7 +154,9 @@ pub fn generate_filename(record: &BenchmarkRecord, prefix: Option<&str>) -> Stri
     let failed_suffix = if record.success { "" } else { "_failed" };
     let prefix_str = prefix.unwrap_or("");
 
-    format!("{prefix_str}{provider}_{model}_{messages}_{req_bytes}_{resp_bytes}{failed_suffix}.jsonl",)
+    format!(
+        "{prefix_str}{provider}_{model}_{messages}_{req_bytes}_{resp_bytes}{failed_suffix}.jsonl",
+    )
 }
 
 /// Get the benchmarks directory, creating it if necessary.

@@ -6,9 +6,7 @@ use anyhow::Result;
 use chrono::Utc;
 use std::fs;
 use tracing::info;
-use tracing_subscriber::{
-    fmt, layer::SubscriberExt, util::SubscriberInitExt, EnvFilter, Layer,
-};
+use tracing_subscriber::{fmt, layer::SubscriberExt, util::SubscriberInitExt, EnvFilter, Layer};
 
 /// Set up logging to both console and file.
 ///
@@ -42,9 +40,7 @@ pub fn setup_logging() -> Result<tracing_appender::non_blocking::WorkerGuard> {
         .add_directive("automated_benchmarks=trace".parse()?);
 
     // Console layer
-    let console_layer = fmt::layer()
-        .with_target(true)
-        .with_filter(console_filter);
+    let console_layer = fmt::layer().with_target(true).with_filter(console_filter);
 
     // File layer with timestamps
     let file_layer = fmt::layer()
@@ -59,10 +55,7 @@ pub fn setup_logging() -> Result<tracing_appender::non_blocking::WorkerGuard> {
         .with(file_layer)
         .init();
 
-    info!(
-        "Logging to file: {}",
-        log_dir.join(&log_filename).display()
-    );
+    info!("Logging to file: {}", log_dir.join(&log_filename).display());
 
     Ok(guard)
 }

@@ -78,9 +78,7 @@ impl TryFrom<ProveArgs> for AgentProver {
     fn try_from(args: ProveArgs) -> Result<Self, Self::Error> {
         match args.prover {
             ProverKind::Direct => Ok(Self::Direct(DirectProver::new())),
-            ProverKind::Proxy => {
-                Ok(Self::Proxy(ProxyProver::new(args.proxy.into())))
-            }
+            ProverKind::Proxy => Ok(Self::Proxy(ProxyProver::new(args.proxy.into()))),
             ProverKind::TlsSingleShot => {
                 let notary = args
                     .notary

@@ -62,7 +62,6 @@ ambassador = "0.4.2"
 strum = { workspace = true }
 
 [dev-dependencies]
-criterion = { workspace = true }
 rand = { workspace = true }
 
 [features]

@@ -1,6 +1,8 @@
 //! Prover presets for automated benchmarking.
 
-use ai_passport::{AgentProver, DirectProver, ProxyConfig, ProxyProver, TlsPerMessageProver, TlsSingleShotProver};
+use ai_passport::{
+    AgentProver, DirectProver, ProxyConfig, ProxyProver, TlsPerMessageProver, TlsSingleShotProver,
+};
 use dotenvy::var;
 
 use super::notary::NotaryPreset;
@@ -89,7 +91,10 @@ pub fn all_prover_presets() -> Vec<&'static ProverPreset> {
 
 /// Find a prover preset by name.
 pub fn find_prover_preset(name: &str) -> Option<&'static ProverPreset> {
-    STATIC_PROVER_PRESETS.iter().find(|p| p.name == name).copied()
+    STATIC_PROVER_PRESETS
+        .iter()
+        .find(|p| p.name == name)
+        .copied()
 }
 
 /// Load prover presets based on environment configuration.
@@ -117,7 +122,10 @@ pub fn load_prover_presets() -> Vec<&'static ProverPreset> {
                 available.join(", ")
             );
         } else {
-            tracing::info!("Using {} prover preset(s) from PROVER_PRESETS", presets.len());
+            tracing::info!(
+                "Using {} prover preset(s) from PROVER_PRESETS",
+                presets.len()
+            );
         }
 
         return presets;

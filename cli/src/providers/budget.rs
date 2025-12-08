@@ -468,9 +468,9 @@ mod tests {
         let budget = make_limited_budget(1000, 10000);
 
         let bytes = budget.max_bytes_left_for_response().unwrap();
-        // recv_capacity=10000, recv=0, overhead_estimate=5000
-        // usable = 10000 - 5000 = 5000
-        assert_eq!(bytes, 5000);
+        // recv_capacity=10000, recv=0, overhead_estimate=DEFAULT_RESPONSE_OVERHEAD=2000
+        // usable = 10000 - 2000 = 8000
+        assert_eq!(bytes, 8000);
     }
 
     #[test]
@@ -478,9 +478,12 @@ mod tests {
         let budget = make_limited_budget(1000, 2000);
 
         let available = budget.available_input_bytes(&[]).unwrap();
-        // sent_capacity=1000, sent=0, overhead_estimate=285, empty_messages="[]"=2
-        // available = 1000 - 2 - 285 = 713
-        assert_eq!(available, 713);
+        // sent_capacity=1000, sent=0
+        // repeated_content_bytes = "[]" = 2
+        // request_overhead = DEFAULT_REQUEST_OVERHEAD = 350
+        // user_message_overhead = {"role":"user","content":""} = 28
+        // available = 1000 - 2 - 350 - 28 = 620
+        assert_eq!(available, 620);
     }
 
     #[test]
@@ -489,18 +492,21 @@ mod tests {
 
         let available = budget.available_recv_bytes().unwrap();
         // recv_capacity=2000, recv=0
-        assert_eq!(available, 2000);
+        // assistant_message_overhead = {"role":"assistant","content":""} = 33
+        // available = 2000 - 33 = 1967
+        assert_eq!(available, 1967);
     }
 
     #[test]
     fn test_overhead_updates_via_budget() {
         let mut budget = make_limited_budget(1000, 10000);
 
-        // Initially uses estimates (plus "[]" = 2 bytes for empty messages)
-        // available_input = 1000 - 2 - 285 = 713
-        assert_eq!(budget.available_input_bytes(&[]).unwrap(), 713);
-        // max_bytes = 10000 - 5000 = 5000
-        assert_eq!(budget.max_bytes_left_for_response().unwrap(), 5000);
+        // Initially uses estimates:
+        // sent_capacity=1000, repeated_content="[]"=2, request_overhead=350, user_message_overhead=28
+        // available_input = 1000 - 2 - 350 - 28 = 620
+        assert_eq!(budget.available_input_bytes(&[]).unwrap(), 620);
+        // max_bytes = 10000 - DEFAULT_RESPONSE_OVERHEAD(2000) = 8000
+        assert_eq!(budget.max_bytes_left_for_response().unwrap(), 8000);
 
         // Record sends/recvs which update overhead
         budget.record_sent(300, 100); // overhead = 200
@@ -508,8 +514,8 @@ mod tests {
 
         // Now uses observed values (and remaining is reduced)
         // sent_remaining = 1000 - 300 = 700
-        // available_input = 700 - 2 - 200 (observed) = 498
-        assert_eq!(budget.available_input_bytes(&[]).unwrap(), 498);
+        // available_input = 700 - 2 - 200 (observed) - 28 = 470
+        assert_eq!(budget.available_input_bytes(&[]).unwrap(), 470);
 
         // recv_remaining = 10000 - 400 = 9600
         // usable_bytes = 9600 - 200 = 9400
@@ -531,8 +537,9 @@ mod tests {
         assert_eq!(budget.recv, 0);
 
         // Overhead should still be observed values
-        // available_input = 1000 - 2 - 200 (observed) = 798
-        assert_eq!(budget.available_input_bytes(&[]).unwrap(), 798);
+        // sent_capacity=1000, repeated_content="[]"=2, observed_request_overhead=200, user_message_overhead=28
+        // available_input = 1000 - 2 - 200 - 28 = 770
+        assert_eq!(budget.available_input_bytes(&[]).unwrap(), 770);
     }
 
     /// Build the expected HTTP/1.1 wire format string for a request.

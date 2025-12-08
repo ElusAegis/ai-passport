@@ -59,10 +59,15 @@ impl ProxyProver {
 
         let tcp_stream = TcpStream::connect((&*self.proxy.host, self.proxy.port))
             .await
-            .with_context(|| format!("Failed to connect to proxy at {}:{}", self.proxy.host, self.proxy.port))?;
+            .with_context(|| {
+                format!(
+                    "Failed to connect to proxy at {}:{}",
+                    self.proxy.host, self.proxy.port
+                )
+            })?;
 
-        let server_name = ServerName::try_from(self.proxy.host.clone())
-            .context("Invalid proxy server name")?;
+        let server_name =
+            ServerName::try_from(self.proxy.host.clone()).context("Invalid proxy server name")?;
 
         let tls_stream = connector
             .connect(server_name, tcp_stream)
@@ -94,7 +99,9 @@ impl Prover for ProxyProver {
         let mut messages = vec![];
 
         loop {
-            let stopped = single_interaction_round(&mut sender, config, &mut messages, false, &mut budget).await?;
+            let stopped =
+                single_interaction_round(&mut sender, config, &mut messages, false, &mut budget)
+                    .await?;
             if stopped {
                 break;
             }
@@ -107,7 +114,10 @@ impl Prover for ProxyProver {
     }
 }
 
-async fn request_attestation(sender: &mut SendRequest<String>, config: &ProveConfig) -> Result<PathBuf> {
+async fn request_attestation(
+    sender: &mut SendRequest<String>,
+    config: &ProveConfig,
+) -> Result<PathBuf> {
     let censor_headers: Vec<&str> = config
         .provider
         .request_censor_headers()
@@ -134,7 +144,10 @@ async fn request_attestation(sender: &mut SendRequest<String>, config: &ProveCon
         .context("Attestation request failed")?;
 
     if response.status() != StatusCode::OK {
-        anyhow::bail!("Attestation request failed with status: {}", response.status());
+        anyhow::bail!(
+            "Attestation request failed with status: {}",
+            response.status()
+        );
     }
 
     let body = response

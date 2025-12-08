@@ -103,9 +103,7 @@ async fn fetch_data_attested(market_limit: usize) -> anyhow::Result<Vec<Market>>
     println!("Fetched {} markets via proxy", markets.len());
 
     // Request attestation for all the API calls made
-    let attestation_path = proxy
-        .request_attestation(Market::api_domain())
-        .await?;
+    let attestation_path = proxy.request_attestation(Market::api_domain()).await?;
     println!(
         "Data fetch attestation saved to: {}",
         attestation_path.display()

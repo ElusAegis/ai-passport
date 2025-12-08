@@ -24,9 +24,8 @@ const FILLER_PHRASES: &[&str] = &[
 ];
 
 /// Regex to extract word count from prompts like "at least 100 words" or "100 words".
-static WORD_COUNT_REGEX: LazyLock<Regex> = LazyLock::new(|| {
-    Regex::new(r"(?:at\s+least\s+)?(\d+)\s+words").expect("Invalid regex")
-});
+static WORD_COUNT_REGEX: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"(?:at\s+least\s+)?(\d+)\s+words").expect("Invalid regex"));
 
 /// Extract requested word count from a prompt.
 ///
@@ -96,7 +95,10 @@ fn generate_text_with_words(target_words: usize) -> String {
 /// Generate a fixed reply for unknown or simple requests.
 pub fn fixed_reply(model: &str, last_user_message: &str) -> String {
     match model {
-        "demo-gpt-4o-mini" => format!("You said: \"{}\" - this is a fixed demo reply.", last_user_message),
+        "demo-gpt-4o-mini" => format!(
+            "You said: \"{}\" - this is a fixed demo reply.",
+            last_user_message
+        ),
         "demo-gpt-3.5-turbo" => "Hello from demo-gpt-3.5-turbo (fixed reply).".to_string(),
         _ => "Unknown model (demo server) - generic fixed reply.".to_string(),
     }
@@ -108,9 +110,15 @@ mod tests {
 
     #[test]
     fn test_extract_word_count() {
-        assert_eq!(extract_word_count("Write at least 100 words about AI"), Some(100));
+        assert_eq!(
+            extract_word_count("Write at least 100 words about AI"),
+            Some(100)
+        );
         assert_eq!(extract_word_count("Write 50 words"), Some(50));
-        assert_eq!(extract_word_count("at least 200 words about technology"), Some(200));
+        assert_eq!(
+            extract_word_count("at least 200 words about technology"),
+            Some(200)
+        );
         assert_eq!(extract_word_count("No word count here"), None);
     }
 
@@ -119,7 +127,7 @@ mod tests {
         let text = generate_text_with_words(50);
         let actual_words = text.split_whitespace().count();
         assert!(
-            actual_words >= 48 && actual_words <= 52,
+            (48..=52).contains(&actual_words),
             "Expected ~50 words, got {}",
             actual_words
         );
@@ -138,7 +146,7 @@ mod tests {
         let text = generate_response(100, None);
         let word_count = text.split_whitespace().count();
         assert!(
-            word_count >= 98 && word_count <= 102,
+            (98..=102).contains(&word_count),
             "Expected ~100 words, got {}",
             word_count
         );

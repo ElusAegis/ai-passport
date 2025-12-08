@@ -22,13 +22,27 @@ pub enum TranscriptEntry {
 
 impl TranscriptEntry {
     /// Create a transcript entry from an HTTP request.
-    pub fn request(method: String, path: String, headers: Vec<(String, String)>, body: String) -> Self {
-        Self::Request { method, path, headers, body }
+    pub fn request(
+        method: String,
+        path: String,
+        headers: Vec<(String, String)>,
+        body: String,
+    ) -> Self {
+        Self::Request {
+            method,
+            path,
+            headers,
+            body,
+        }
     }
 
     /// Create a transcript entry from an HTTP response.
     pub fn response(status: u16, headers: Vec<(String, String)>, body: String) -> Self {
-        Self::Response { status, headers, body }
+        Self::Response {
+            status,
+            headers,
+            body,
+        }
     }
 
     /// Censor specified headers by replacing their values with X's.
@@ -39,7 +53,10 @@ impl TranscriptEntry {
         };
 
         for (name, value) in headers {
-            if headers_to_censor.iter().any(|h| h.eq_ignore_ascii_case(name)) {
+            if headers_to_censor
+                .iter()
+                .any(|h| h.eq_ignore_ascii_case(name))
+            {
                 *value = "X".repeat(value.len());
             }
         }
