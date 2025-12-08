@@ -82,12 +82,18 @@ dependencies = [
  "anyhow",
  "async-trait",
  "chrono",
+ "http-body-util",
+ "hyper",
+ "hyper-util",
  "reqwest",
+ "rustls 0.23.31",
  "serde",
  "serde_json",
  "tokio",
+ "tokio-rustls 0.26.2",
  "tracing",
  "tracing-subscriber",
+ "webpki-roots 0.26.11",
 ]
 
 [[package]]

@@ -5,7 +5,7 @@ edition.workspace = true
 
 [dependencies]
 chrono = "0.4.41"
-tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }
+tokio = { workspace = true, features = ["macros", "rt-multi-thread", "net"] }
 serde = { workspace = true, features = ["derive"] }
 serde_json = { workspace = true }
 anyhow = { workspace = true }
@@ -17,5 +17,14 @@ tracing = { workspace = true }
 tracing-subscriber = { workspace = true }
 
 # --- Networking (HTTP) ---
+# Direct HTTP client (for non-attested requests)
 reqwest = { version = "0.12.23", features = ["json", "gzip", "brotli", "deflate"] }
 async-trait = "0.1.88"
+
+# Proxy client dependencies (for attested requests)
+hyper = { workspace = true }
+hyper-util = { workspace = true }
+http-body-util = { workspace = true }
+rustls = { workspace = true }
+tokio-rustls = { workspace = true }
+webpki-roots = { workspace = true }

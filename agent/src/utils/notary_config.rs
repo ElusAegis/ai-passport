@@ -1,49 +1,19 @@
-use ai_passport::{
-    ApiProvider, ModelConfig, NetworkSetting, NotaryConfig, NotaryMode, ProveConfig, ServerConfig,
-    SessionConfig, SessionMode,
-};
+use ai_passport::{ApiProvider, ProveConfig};
 use anyhow::Context;
 
-pub(crate) fn gen_cfg(request_limit: usize, response_limit: usize) -> anyhow::Result<ProveConfig> {
+pub(crate) fn gen_cfg(_request_limit: usize, _response_limit: usize) -> anyhow::Result<ProveConfig> {
     let domain = "api.proof-of-autonomy.elusaegis.xyz";
-    let provider = ApiProvider::from_domain(domain);
 
-    let server_config = ServerConfig::builder()
-        .domain(domain.to_string())
+    let api_provider = ApiProvider::builder()
+        .domain(domain)
         .port(3000_u16)
-        .build()
-        .expect("server_config");
-
-    let model_config = ModelConfig::builder()
-        .server(server_config)
-        .inference_route("/v1/chat/completions".to_string())
         .api_key("secret123".to_string())
-        .model_id("demo-gpt-4o-mini")
         .build()
-        .expect("model_config");
-
-    let session_config = SessionConfig::builder()
-        .max_msg_num(1)
-        .max_single_request_size(request_limit)
-        .max_single_response_size(response_limit)
-        .mode(SessionMode::Single)
-        .build()
-        .expect("session_config");
-
-    let notary_config = NotaryConfig::builder()
-        .domain("localhost".to_string())
-        .port(7047_u16)
-        .path_prefix("".to_string())
-        .mode(NotaryMode::RemoteNonTLS)
-        .network_optimization(NetworkSetting::Latency)
-        .finalize_for_session(&session_config)
-        .expect("notary_config");
+        .context("Failed to build ApiProvider")?;
 
     ProveConfig::builder()
-        .model(model_config)
-        .notary(notary_config)
-        .session(session_config)
-        .privacy(provider.into())
+        .provider(api_provider)
+        .model_id("demo-gpt-4o-mini")
         .build()
-        .context("notary_config")
+        .context("Failed to build ProveConfig")
 }
