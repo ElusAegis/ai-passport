@@ -1,12 +1,98 @@
-/target
+# Build artifacts
+/target/
 
-/model/*.json
-!/model/input.json
-/.env
-proofs/
-_interaction_proof_*.json
+# Environment files (contain secrets)
+.env
+.env.local
+.env.*.local
 
+# Generated proofs and attestations
+/proofs/
+/attestations/
+*_interaction_proof_*.json
+
+# Model server certificates (generated locally)
 model-server/cert/*
 /notary/tls/
-/benchmarks/*
-/attestations/*
+
+# Benchmark outputs (regenerated, large files)
+/benchmarks/*.jsonl
+/benchmarks/*/logs/
+
+# IDE and editor files
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Python virtual environment (for benchmark scripts)
+.venv/
+__pycache__/
+*.pyc
+
+# Excalidraw source files (large binary files)
+*.excalidraw
+
+# Claude Code local settings
+.claude/
+
+# Misc
+*.log
+*.bak
+/benchmarks/benchmarks-tee-notary/anthropic_claude_haiku_4_5_20251001_6_500_1000.jsonl
+/benchmarks/benchmarks-tee-notary/anthropic_claude_haiku_4_5_20251001_32_500_1000.jsonl
+/benchmarks/benchmarks_all_models_proxy_tee-proxy_direct/benchmarks_haiku_tee_notary/anthropic_claude_haiku_4_5_20251001_32_500_1000.jsonl
+/benchmarks/benchmarks_all_models_proxy_tee-proxy_direct/benchmark_summary_round1.md
+/benchmarks/benchmarks_all_models_proxy_tee-proxy_direct/opt-anthropic_claude_haiku_4_5_20251001_2_500_1000.jsonl
+/benchmarks/benchmarks_all_models_proxy_tee-proxy_direct/opt-anthropic_claude_sonnet_4_5_20250929_2_500_1000.jsonl
+/benchmarks/benchmarks_all_models_proxy_tee-proxy_direct/opt-mistral_ministral_3b_latest_2_500_1000.jsonl
+/benchmarks/benchmarks_all_models_proxy_tee-proxy_direct/opt-mistral_ministral_8b_latest_2_500_1000.jsonl
+/benchmarks/benchmarks_all_models_proxy_tee-proxy_direct/opt-redpill_gpt_4o_2_500_1000.jsonl
+/benchmarks/benchmarks_all_models_single_shot/anthropic_claude_haiku_4_5_20251001_1_500_1000.jsonl
+/benchmarks/benchmarks_all_models_single_shot/anthropic_claude_haiku_4_5_20251001_2_500_1000.jsonl
+/benchmarks/benchmarks_all_models_single_shot/anthropic_claude_haiku_4_5_20251001_4_500_1000.jsonl
+/benchmarks/benchmarks_all_models_single_shot/anthropic_claude_haiku_4_5_20251001_6_500_1000.jsonl
+/benchmarks/benchmarks_all_models_single_shot/anthropic_claude_sonnet_4_5_20250929_1_500_1000.jsonl
+/benchmarks/benchmarks_all_models_single_shot/anthropic_claude_sonnet_4_5_20250929_2_500_1000.jsonl
+/benchmarks/benchmarks_all_models_single_shot/anthropic_claude_sonnet_4_5_20250929_4_500_1000.jsonl
+/benchmarks/benchmarks_all_models_single_shot/anthropic_claude_sonnet_4_5_20250929_6_500_1000.jsonl
+/benchmarks/benchmarks_all_models_single_shot/mistral_ministral_3b_latest_1_500_1000.jsonl
+/benchmarks/benchmarks_all_models_single_shot/mistral_ministral_3b_latest_2_500_1000.jsonl
+/benchmarks/benchmarks_all_models_single_shot/mistral_ministral_3b_latest_4_500_1000.jsonl
+/benchmarks/benchmarks_all_models_single_shot/mistral_ministral_3b_latest_6_500_1000.jsonl
+/benchmarks/benchmarks_all_models_single_shot/mistral_ministral_8b_latest_1_500_1000.jsonl
+/benchmarks/benchmarks_all_models_single_shot/mistral_ministral_8b_latest_2_500_1000.jsonl
+/benchmarks/benchmarks_all_models_single_shot/mistral_ministral_8b_latest_4_500_1000.jsonl
+/benchmarks/benchmarks_all_models_single_shot/mistral_ministral_8b_latest_6_500_1000.jsonl
+/benchmarks/benchmarks_all_models_single_shot/redpill_gpt_4o_1_500_1000.jsonl
+/benchmarks/benchmarks_all_models_single_shot/redpill_gpt_4o_2_500_1000.jsonl
+/benchmarks/benchmarks_all_models_single_shot/redpill_gpt_4o_4_500_1000.jsonl
+/benchmarks/benchmarks_all_models_single_shot/redpill_gpt_4o_6_500_1000.jsonl
+/benchmarks/benchmarks_all_models_tls_per_message/anthropic_claude_haiku_4_5_20251001_32_500_1000.jsonl
+/benchmarks/benchmarks_all_models_tls_per_message/anthropic_claude_sonnet_4_5_20250929_32_500_1000.jsonl
+/benchmarks/benchmarks_all_models_tls_per_message/mistral_ministral_3b_latest_32_500_1000.jsonl
+/benchmarks/benchmarks_all_models_tls_per_message/mistral_ministral_8b_latest_32_500_1000.jsonl
+/benchmarks/benchmarks_all_models_tls_per_message/redpill_gpt_4o_32_500_1000.jsonl
+/benchmarks/benchmarks_anthropic_direct_proxy/anthropic_claude_haiku_4_5_20251001_2_500_1000.jsonl
+/benchmarks/benchmarks_other_providers_direct/mistral_ministral_3b_latest_2_500_1000.jsonl
+/benchmarks/benchmarks_other_providers_direct/mistral_ministral_8b_latest_2_500_1000.jsonl
+/benchmarks/benchmarks_other_providers_direct/redpill_gpt_4o_2_500_1000.jsonl
+/benchmarks/benchmarks_other_providers_proxy/mistral_ministral_3b_latest_2_500_1000.jsonl
+/benchmarks/benchmarks_other_providers_proxy/mistral_ministral_8b_latest_2_500_1000.jsonl
+/benchmarks/benchmarks_other_providers_proxy/redpill_gpt_4o_2_500_1000.jsonl
+/benchmarks/benchmarks_tls_per_message_32_sonnet_haiku/anthropic_claude_haiku_4_5_20251001_32_500_1000.jsonl
+/benchmarks/benchmarks_tls_per_message_32_sonnet_haiku/anthropic_claude_haiku_4_5_20251001_35_500_1000.jsonl
+/benchmarks/benchmarks_tls_per_message_32_sonnet_haiku/anthropic_claude_haiku_4_5_20251001_35_500_1000_failed.jsonl
+/benchmarks/benchmarks_tls_per_message_32_sonnet_haiku/anthropic_claude_sonnet_4_5_20250929_32_500_1000.jsonl
+/benchmarks/benchmarks_tls_per_message_32_sonnet_haiku/anthropic_claude_sonnet_4_5_20250929_35_500_1000.jsonl
+/benchmarks/benchmarks_tls_per_message_32_sonnet_haiku/anthropic_claude_sonnet_4_5_20250929_37_500_1000_failed.jsonl
