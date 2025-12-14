@@ -39,7 +39,7 @@ impl Provider for Anthropic {
     ) -> Value {
         json!({
             "model": model_id,
-            "max_tokens": max_tokens.unwrap_or(1024),
+            "max_tokens": max_tokens.unwrap_or(Self::MAX_TOKENS),
             "messages": messages,
             "stream": false,
         })
