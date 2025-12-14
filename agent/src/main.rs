@@ -43,13 +43,43 @@ use crate::tools::polymarket::PolymarketTool;
 use crate::tools::portfolio::PortfolioTool;
 use crate::tools::{AttestationMode, Tool};
 use crate::utils::logging::init_logging;
-use ai_passport::{with_input_source, ApiProvider, DirectProver, ProveConfig, Prover, ProverKind};
+use ai_passport::{
+    with_input_source, ApiProvider, DirectProver, NetworkSetting, NotaryConfig, NotaryMode,
+    ProveConfig, Prover, ProverKind, ProxyConfig, ProxyProver, TlsPerMessageProver,
+    TlsSingleShotProver,
+};
 use anyhow::Context;
 use clap::Parser;
 use std::env;
 use std::sync::Arc;
 use std::time::Duration;
 use tracing::info;
+
+const KIB: usize = 1024;
+
+/// Hardcoded proxy config: proxy-tee.proof-of-autonomy.elusaegis.xyz:8443
+fn proxy_tee_config() -> ProxyConfig {
+    ProxyConfig {
+        host: "proxy-tee.proof-of-autonomy.elusaegis.xyz".to_string(),
+        port: 8443,
+    }
+}
+
+/// Hardcoded notary config: notary.proof-of-autonomy.elusaegis.xyz:7047
+fn notary_remote_config() -> NotaryConfig {
+    NotaryConfig::builder()
+        .domain("notary.proof-of-autonomy.elusaegis.xyz".to_string())
+        .port(7047u16)
+        .path_prefix("".to_string())
+        .mode(NotaryMode::RemoteTLS)
+        .max_total_sent(64 * KIB)
+        .max_total_recv(64 * KIB)
+        .max_decrypted_online(64 * KIB)
+        .defer_decryption(true)
+        .network_optimization(NetworkSetting::Bandwidth)
+        .build()
+        .expect("Failed to build NotaryConfig")
+}
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
@@ -96,6 +126,9 @@ async fn main() -> anyhow::Result<()> {
     let prove_config = ProveConfig::builder()
         .provider(api_provider)
         .model_id(model_id.clone())
+        .expected_exchanges(args.rounds as u32)
+        .max_request_bytes(5 * KIB as u32)
+        .max_response_bytes(3 * KIB as u32)
         .build()
         .context("Failed to build ProveConfig")?;
 
@@ -115,6 +148,9 @@ async fn main() -> anyhow::Result<()> {
         info!("  Round delay: {:?}", delay);
     }
     info!("  Polymarket markets: {}", args.polymarket_limit);
+    if args.polymarket_random_page {
+        info!("  Polymarket random pagination: enabled (pages 0-4)");
+    }
 
     // Initialize portfolio with sample positions
     let portfolio = PortfolioState::sample();
@@ -127,7 +163,7 @@ async fn main() -> anyhow::Result<()> {
     let tools: Vec<Arc<dyn Tool>> = vec![
         Arc::new(PortfolioTool::new()),
         Arc::new(CoinGeckoTool::new()),
-        Arc::new(PolymarketTool::new(args.polymarket_limit)),
+        Arc::new(PolymarketTool::new(args.polymarket_limit, args.polymarket_random_page)),
     ];
 
     info!(
@@ -153,18 +189,31 @@ async fn main() -> anyhow::Result<()> {
             with_input_source(input_source, prover.run(&prove_config)).await?;
         }
         ProverKind::Proxy => {
-            // TODO: Implement proxy prover support
-            anyhow::bail!(
-                "Proxy prover not yet implemented for agent. Use --prover direct for now."
+            let proxy_config = proxy_tee_config();
+            info!(
+                "Using proxy-TEE: {}:{}",
+                proxy_config.host, proxy_config.port
             );
+            let prover = ProxyProver::new(proxy_config);
+            with_input_source(input_source, prover.run(&prove_config)).await?;
         }
         ProverKind::TlsSingleShot => {
-            // TODO: Implement TLS single-shot prover support
-            anyhow::bail!("TLS single-shot prover not yet implemented for agent. Use --prover direct for now.");
+            let notary_config = notary_remote_config();
+            info!(
+                "Using TLS single-shot with notary: {}:{}",
+                notary_config.domain, notary_config.port
+            );
+            let prover = TlsSingleShotProver::new(notary_config);
+            with_input_source(input_source, prover.run(&prove_config)).await?;
         }
         ProverKind::TlsPerMessage => {
-            // TODO: Implement TLS per-message prover support
-            anyhow::bail!("TLS per-message prover not yet implemented for agent. Use --prover direct for now.");
+            let notary_config = notary_remote_config();
+            info!(
+                "Using TLS per-message with notary: {}:{}",
+                notary_config.domain, notary_config.port
+            );
+            let prover = TlsPerMessageProver::new(notary_config);
+            with_input_source(input_source, prover.run(&prove_config)).await?;
         }
     }
 

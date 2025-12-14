@@ -55,6 +55,10 @@ pub struct AgentArgs {
     )]
     pub polymarket_limit: usize,
 
+    /// Use random pagination for Polymarket (offset 0-4)
+    #[arg(long = "polymarket-random-page", default_value = "false")]
+    pub polymarket_random_page: bool,
+
     /// Specify the model to use
     #[arg(long = "model", env = "MODEL_ID")]
     pub model_id: Option<String>,

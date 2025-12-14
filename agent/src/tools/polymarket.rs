@@ -17,31 +17,46 @@ const POLYMARKET_API_DOMAIN: &str = "gamma-api.polymarket.com";
 pub struct PolymarketTool {
     /// Maximum number of markets to fetch
     pub limit: usize,
+    /// Use random pagination (offset 0-4)
+    pub random_page: bool,
     /// HTTP client (reused)
     client: Client,
 }
 
 impl Default for PolymarketTool {
     fn default() -> Self {
-        Self::new(5)
+        Self::new(5, false)
     }
 }
 
 impl PolymarketTool {
-    pub fn new(limit: usize) -> Self {
+    pub fn new(limit: usize, random_page: bool) -> Self {
         Self {
             limit,
+            random_page,
             client: Client::new(),
         }
     }
 
     /// Fetch markets directly (no attestation).
     async fn fetch_direct(&self) -> Result<Vec<Market>> {
+        use rand::Rng;
+
         let mut url = Url::parse(&format!("https://{}/markets", POLYMARKET_API_DOMAIN))
             .context("Invalid base URL")?;
 
+        // Calculate offset: random page 0-4 if enabled, otherwise 0
+        let offset = if self.random_page {
+            let page = rand::rng().random_range(0..5);
+            tracing::info!("Polymarket: using random page {} (offset {})", page, page * self.limit);
+            page * self.limit
+        } else {
+            0
+        };
+
         url.query_pairs_mut()
             .append_pair("limit", &self.limit.to_string())
+            .append_pair("offset", &offset.to_string())
             .append_pair("tag_id", "21") // Cryptocurrency tag
             .append_pair("related_tags", "true")
             .append_pair("order", "volume")
@@ -193,7 +208,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_polymarket_fetch_direct() {
-        let tool = PolymarketTool::new(3);
+        let tool = PolymarketTool::new(3, false);
         let portfolio = PortfolioState::default();
 
         let result = tool.fetch(&AttestationMode::Direct, &portfolio).await;

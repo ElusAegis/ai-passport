@@ -27,17 +27,13 @@ pub struct PortfolioState {
 }
 
 impl PortfolioState {
-    /// Create an empty portfolio.
-    pub fn new() -> Self {
-        Self::default()
-    }
-
     /// Create a portfolio from a list of positions.
     pub fn from_positions(positions: Vec<Position>) -> Self {
         Self { positions }
     }
 
     /// Add a position to the portfolio.
+    #[cfg(test)]
     pub fn add_position(&mut self, position: Position) {
         // Check if we already have this symbol
         if let Some(existing) = self
@@ -75,15 +71,6 @@ impl PortfolioState {
     /// Calculate total portfolio value in USD.
     pub fn total_value_usd(&self) -> f64 {
         self.positions.iter().map(|p| p.value_usd()).sum()
-    }
-
-    /// Update prices for all positions.
-    pub fn update_prices(&mut self, prices: &std::collections::HashMap<String, f64>) {
-        for position in &mut self.positions {
-            if let Some(&price) = prices.get(&position.symbol) {
-                position.price_usd = price;
-            }
-        }
     }
 
     /// Execute a swap: sell `amount_usd` of `from` asset and buy `to` asset.

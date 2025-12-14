@@ -62,11 +62,6 @@ impl AgentInputSource {
         }
     }
 
-    /// Get a reference to the current portfolio state.
-    pub fn portfolio(&self) -> &PortfolioState {
-        &self.portfolio
-    }
-
     /// Fetch data from all tools.
     async fn fetch_all_tools(&self) -> Result<Vec<ToolOutput>> {
         let mut outputs = Vec::new();
@@ -112,7 +107,11 @@ impl AgentInputSource {
         let decision = TradeDecision::parse(response)
             .context("Failed to parse LLM response as TradeDecision")?;
 
-        info!("Round {} complete. Trades: {}", self.round, decision.trades.len());
+        info!(
+            "Round {} complete. Trades: {}",
+            self.round,
+            decision.trades.len()
+        );
 
         for trade in &decision.trades {
             info!(
@@ -123,7 +122,10 @@ impl AgentInputSource {
 
         // Execute trades on portfolio
         for trade in &decision.trades {
-            if let Err(e) = self.portfolio.execute_swap(&trade.from, &trade.to, trade.amount_usd) {
+            if let Err(e) = self
+                .portfolio
+                .execute_swap(&trade.from, &trade.to, trade.amount_usd)
+            {
                 tracing::warn!("Trade execution failed: {}", e);
             }
         }
@@ -243,13 +245,7 @@ mod tests {
     fn test_agent_input_source_creation() {
         let portfolio = PortfolioState::sample();
         let tools: Vec<Arc<dyn Tool>> = vec![];
-        let source = AgentInputSource::new(
-            portfolio,
-            tools,
-            3,
-            AttestationMode::Direct,
-            None,
-        );
+        let source = AgentInputSource::new(portfolio, tools, 3, AttestationMode::Direct, None);
 
         assert_eq!(source.round, 0);
         assert_eq!(source.max_rounds, 3);
