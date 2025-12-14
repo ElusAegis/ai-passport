@@ -174,8 +174,6 @@ pub fn estimate_single_shot_capacity(
         ));
     }
 
-    let n = n + 1; // Account for a safety margin of one extra exchange
-
     // Get overhead estimates for the provider based on expected sizes
     let expected_overhead = prove_config.provider.expected_overhead();
     let request_overhead = expected_overhead.request_overhead();
@@ -223,14 +221,25 @@ pub fn estimate_single_shot_capacity(
     }
 
     // Create new config with estimated capacities
+    // For single exchange (n=2 after safety margin), we can defer decryption
+    // since we'll close the connection immediately after one request-response
+    let is_single_exchange = prove_config.expected_exchanges == Some(1);
+    let (defer_decryption, max_decrypted_online) = if is_single_exchange {
+        debug!("Single exchange mode: enabling defer_decryption, disabling online decryption");
+        (true, 0)
+    } else {
+        (base_config.defer_decryption, recv_capacity)
+    };
+
     debug!(
-        "Estimated single-shot notary capacity for {} exchanges: send={} bytes, recv={} bytes",
-        n, send_capacity, recv_capacity
+        "Estimated single-shot notary capacity for {} exchanges: send={} bytes, recv={} bytes, defer_decryption={}",
+        n, send_capacity, recv_capacity, defer_decryption
     );
     let new_config = NotaryConfig {
         max_total_sent: send_capacity,
         max_total_recv: recv_capacity,
-        max_decrypted_online: recv_capacity,
+        max_decrypted_online,
+        defer_decryption,
         ..base_config.clone()
     };
 

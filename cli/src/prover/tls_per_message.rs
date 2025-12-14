@@ -84,18 +84,28 @@ impl Prover for TlsPerMessageProver {
 
         let mut stored_proofs = Vec::<PathBuf>::new();
         let mut all_messages = vec![];
+        let mut exchange_count = 0u32;
+
+        // Helper to check if we need more exchanges after a given count
+        let needs_more = |count: u32| {
+            config
+                .expected_exchanges
+                .map_or(true, |expected| count < expected)
+        };
 
         // Set up the current instance of the prover
-        let mut current_instance_handle: JoinHandle<SetupResult> =
+        let mut current_handle: JoinHandle<SetupResult> =
             spawn_setup(&all_messages, &budget, 1)?;
 
-        // Pre-warm the next instance with capacity for second round (lookahead=2)
-        let mut future_instance_handle: JoinHandle<SetupResult> =
-            spawn_setup(&all_messages, &budget, 2)?;
+        // Pre-warm the next instance (skip if only 1 exchange expected)
+        let mut next_handle: Option<JoinHandle<SetupResult>> =
+            needs_more(1).then(|| spawn_setup(&all_messages, &budget, 2)).transpose()?;
 
         loop {
+            exchange_count += 1;
+
             // Wait for the current instance to be ready
-            let (prover_result, notary_config) = current_instance_handle.await?;
+            let (prover_result, notary_config) = current_handle.await?;
             let mut current_instance = prover_result?;
 
             budget.reset().set_capacity((&notary_config).into());
@@ -110,9 +120,7 @@ impl Prover for TlsPerMessageProver {
             )
             .await?;
 
-            if was_stopped {
-                break;
-            }
+            let should_continue = !was_stopped && needs_more(exchange_count);
 
             // Notarize the session
             debug!("Notarizing the session...");
@@ -121,7 +129,7 @@ impl Prover for TlsPerMessageProver {
                 .context("Error notarizing the session")?;
 
             // Save the proof to a file
-            let current_exchanges = (all_messages.len() / 2) as u32; // Each exchange is 2 messages
+            let current_exchanges = (all_messages.len() / 2) as u32;
             stored_proofs.push(save_to_file(
                 &format!(
                     "tls_{}_part_{current_exchanges}_per_message",
@@ -132,11 +140,17 @@ impl Prover for TlsPerMessageProver {
                 &secrets,
             )?);
 
-            // Prepare for the next iteration - use the pre-warmed instance
-            current_instance_handle = future_instance_handle;
+            if !should_continue {
+                break;
+            }
 
-            // Pre-warm the next instance with updated capacity estimate
-            future_instance_handle = spawn_setup(&all_messages, &budget, 2)?;
+            // Use pre-warmed instance for next iteration
+            current_handle = next_handle.take().expect("pre-warmed instance should exist");
+
+            // Pre-warm next instance only if we'll need it
+            next_handle = needs_more(exchange_count + 1)
+                .then(|| spawn_setup(&all_messages, &budget, 2))
+                .transpose()?;
         }
 
         display_proofs(&stored_proofs);

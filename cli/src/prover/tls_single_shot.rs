@@ -60,19 +60,27 @@ impl Prover for TlsSingleShotProver {
 
         // 4) Interaction loop
         let mut all_messages = vec![];
+        let mut exchange_count = 0u32;
 
         loop {
-            // Single-shot uses keep-alive (close_connection = false)
+            exchange_count += 1;
+
+            // Close connection on the last expected exchange to enable defer_decryption optimization
+            let is_last_exchange = config
+                .expected_exchanges
+                .map(|expected| exchange_count >= expected)
+                .unwrap_or(false);
+
             let was_stopped = single_interaction_round(
                 &mut request_sender,
                 config,
                 &mut all_messages,
-                false,
+                is_last_exchange,
                 &mut budget,
             )
             .await?;
 
-            if was_stopped {
+            if was_stopped || is_last_exchange {
                 drop(request_sender);
                 break;
             }
