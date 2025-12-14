@@ -3,14 +3,17 @@
 use super::{AttestationMode, Tool, ToolOutput};
 use crate::portfolio::PortfolioState;
 use crate::utils::serialization::{de_opt_f64, de_vec_string_flexible};
+use ai_passport::{ProxyConfig, ProxyProver};
 use anyhow::{Context, Result};
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
-use reqwest::{Client, Url};
+use hyper::StatusCode;
+use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use std::time::Instant;
 
 const POLYMARKET_API_DOMAIN: &str = "gamma-api.polymarket.com";
+const POLYMARKET_API_PORT: u16 = 443;
 
 /// Polymarket tool configuration.
 #[derive(Debug, Clone)]
@@ -38,35 +41,37 @@ impl PolymarketTool {
         }
     }
 
-    /// Fetch markets directly (no attestation).
-    async fn fetch_direct(&self) -> Result<Vec<Market>> {
+    /// Build the query path for the Polymarket API.
+    fn build_query_path(&self) -> String {
         use rand::Rng;
-
-        let mut url = Url::parse(&format!("https://{}/markets", POLYMARKET_API_DOMAIN))
-            .context("Invalid base URL")?;
 
         // Calculate offset: random page 0-4 if enabled, otherwise 0
         let offset = if self.random_page {
             let page = rand::rng().random_range(0..5);
-            tracing::info!("Polymarket: using random page {} (offset {})", page, page * self.limit);
+            tracing::info!(
+                "Polymarket: using random page {} (offset {})",
+                page,
+                page * self.limit
+            );
             page * self.limit
         } else {
             0
         };
 
-        url.query_pairs_mut()
-            .append_pair("limit", &self.limit.to_string())
-            .append_pair("offset", &offset.to_string())
-            .append_pair("tag_id", "21") // Cryptocurrency tag
-            .append_pair("related_tags", "true")
-            .append_pair("order", "volume")
-            .append_pair("ascending", "false")
-            .append_pair("active", "true")
-            .append_pair("closed", "false");
+        format!(
+            "/markets?limit={}&offset={}&tag_id=21&related_tags=true&order=volume&ascending=false&active=true&closed=false",
+            self.limit, offset
+        )
+    }
+
+    /// Fetch markets directly (no attestation).
+    async fn fetch_direct(&self) -> Result<Vec<Market>> {
+        let path = self.build_query_path();
+        let url = format!("https://{}{}", POLYMARKET_API_DOMAIN, path);
 
         let resp = self
             .client
-            .get(url)
+            .get(&url)
             .header("accept", "application/json")
             .send()
             .await
@@ -78,6 +83,42 @@ impl PolymarketTool {
             .json()
             .await
             .context("Failed to parse Polymarket response")?;
+
+        Ok(markets)
+    }
+
+    /// Fetch markets via proxy-TEE (with attestation).
+    async fn fetch_proxy(&self, host: &str, port: u16) -> Result<Vec<Market>> {
+        let prover = ProxyProver::new(ProxyConfig {
+            host: host.to_string(),
+            port,
+        });
+
+        let path = self.build_query_path();
+        tracing::info!("Polymarket: fetching via proxy-TEE: {}", path);
+
+        let response = prover
+            .fetch(POLYMARKET_API_DOMAIN, POLYMARKET_API_PORT, &path, true)
+            .await
+            .context("Failed to fetch via proxy")?;
+
+        if response.status != StatusCode::OK {
+            anyhow::bail!(
+                "Polymarket API error: {} - {}",
+                response.status,
+                response.body
+            );
+        }
+
+        if let Some(attestation_path) = &response.attestation_path {
+            tracing::info!(
+                "Polymarket attestation saved to: {}",
+                attestation_path.display()
+            );
+        }
+
+        let markets: Vec<Market> =
+            serde_json::from_str(&response.body).context("Failed to parse Polymarket response")?;
 
         Ok(markets)
     }
@@ -138,13 +179,9 @@ impl Tool for PolymarketTool {
 
         let markets = match mode {
             AttestationMode::Direct => self.fetch_direct().await?,
-            AttestationMode::ProxyTee { .. } => {
-                // TODO: Implement proxy-TEE fetch
-                anyhow::bail!("ProxyTee mode not yet implemented for Polymarket")
-            }
-            AttestationMode::TlsNotary { .. } => {
-                // TODO: Implement TLSNotary fetch
-                anyhow::bail!("TlsNotary mode not yet implemented for Polymarket")
+            AttestationMode::ProxyTee { host, port } => self.fetch_proxy(host, *port).await?,
+            _ => {
+                anyhow::bail!("Other modes are not yet implemented for Polymarket")
             }
         };
 

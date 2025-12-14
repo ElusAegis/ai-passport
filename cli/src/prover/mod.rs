@@ -10,7 +10,7 @@ mod tls_per_message;
 mod tls_single_shot;
 
 pub use direct::DirectProver;
-pub use proxy::{ProxyConfig, ProxyProver};
+pub use proxy::{AttestedResponse, ProxyConfig, ProxyProver};
 pub use tls_per_message::TlsPerMessageProver;
 pub use tls_single_shot::TlsSingleShotProver;
 

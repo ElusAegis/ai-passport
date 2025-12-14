@@ -3,6 +3,10 @@
 //! A prover that connects through an attestation proxy server.
 //! The proxy records the transcript and returns an attestation on demand.
 //!
+//! [`ProxyProver`] supports both:
+//! - LLM interactions via the `Prover` trait (`run()`)
+//! - Tool data fetching via `fetch()` method
+//!
 //! **Best for**: Getting attestations without TLSNotary overhead.
 
 use super::Prover;
@@ -14,7 +18,7 @@ use anyhow::{Context, Result};
 use async_trait::async_trait;
 use http_body_util::BodyExt;
 use hyper::client::conn::http1::SendRequest;
-use hyper::header::{CONNECTION, HOST};
+use hyper::header::{ACCEPT, CONNECTION, HOST};
 use hyper::{Method, Request, StatusCode};
 use hyper_util::rt::TokioIo;
 use rustls::pki_types::ServerName;
@@ -36,7 +40,37 @@ pub struct ProxyConfig {
     pub port: u16,
 }
 
+/// Result of an attested fetch operation.
+#[derive(Debug)]
+pub struct AttestedResponse {
+    /// HTTP status code
+    pub status: StatusCode,
+    /// Response body as string
+    pub body: String,
+    /// Path to saved attestation file (if requested)
+    pub attestation_path: Option<PathBuf>,
+}
+
 /// Proxy-based prover - connects through attestation proxy.
+///
+/// Supports both LLM interactions (via `Prover::run()`) and
+/// tool data fetching (via `fetch()`).
+///
+/// # Example - Tool data fetching
+///
+/// ```ignore
+/// let prover = ProxyProver::new(ProxyConfig {
+///     host: "proxy-tee.example.com".to_string(),
+///     port: 8443,
+/// });
+///
+/// let response = prover.fetch(
+///     "gamma-api.polymarket.com",
+///     443,
+///     "/markets?limit=5",
+///     true, // save attestation
+/// ).await?;
+/// ```
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ProxyProver {
     pub proxy: ProxyConfig,
@@ -47,6 +81,7 @@ impl ProxyProver {
         Self { proxy }
     }
 
+    /// Connect to the proxy server and return an HTTP sender.
     async fn connect(&self) -> Result<SendRequest<String>> {
         let mut root_store = rustls::RootCertStore::empty();
         root_store.extend(webpki_roots::TLS_SERVER_ROOTS.iter().cloned());
@@ -86,6 +121,114 @@ impl ProxyProver {
 
         Ok(sender)
     }
+
+    /// Fetch data from a target API through the proxy (for tools).
+    ///
+    /// # Arguments
+    ///
+    /// * `target_domain` - The target API domain (e.g., "gamma-api.polymarket.com")
+    /// * `target_port` - The target API port (usually 443)
+    /// * `path` - The request path including query string (e.g., "/markets?limit=5")
+    /// * `save_attestation` - Whether to request and save an attestation after the fetch
+    pub async fn fetch(
+        &self,
+        target_domain: &str,
+        target_port: u16,
+        path: &str,
+        save_attestation: bool,
+    ) -> Result<AttestedResponse> {
+        let mut sender = self.connect().await?;
+
+        debug!(
+            "ProxyProver: fetching https://{}:{}{} via proxy",
+            target_domain, target_port, path
+        );
+
+        // Build the target host header (include port if non-standard)
+        let host_header = if target_port == 443 {
+            target_domain.to_string()
+        } else {
+            format!("{}:{}", target_domain, target_port)
+        };
+
+        let request = Request::builder()
+            .method(Method::GET)
+            .uri(path)
+            .header(HOST, &host_header)
+            .header(ACCEPT, "application/json")
+            .header(CONNECTION, "keep-alive")
+            .body(String::new())
+            .context("Failed to build request")?;
+
+        let response = sender
+            .send_request(request)
+            .await
+            .context("Request to proxy failed")?;
+
+        let status = response.status();
+        let body_bytes = response
+            .into_body()
+            .collect()
+            .await
+            .context("Failed to read response body")?
+            .to_bytes();
+
+        let body =
+            String::from_utf8(body_bytes.to_vec()).context("Invalid UTF-8 in response")?;
+
+        // Optionally request attestation
+        let attestation_path = if save_attestation {
+            Some(self.fetch_attestation(&mut sender, target_domain).await?)
+        } else {
+            None
+        };
+
+        Ok(AttestedResponse {
+            status,
+            body,
+            attestation_path,
+        })
+    }
+
+    /// Request an attestation from the proxy for a tool fetch.
+    async fn fetch_attestation(
+        &self,
+        sender: &mut SendRequest<String>,
+        target_domain: &str,
+    ) -> Result<PathBuf> {
+        info!("Requesting attestation from proxy for {}", target_domain);
+
+        let request = Request::builder()
+            .method(Method::GET)
+            .uri("/__attest")
+            .header(HOST, target_domain)
+            .header(CONNECTION, "close")
+            .body(String::new())
+            .context("Failed to build attestation request")?;
+
+        let response = sender
+            .send_request(request)
+            .await
+            .context("Attestation request failed")?;
+
+        if response.status() != StatusCode::OK {
+            anyhow::bail!(
+                "Attestation request failed with status: {}",
+                response.status()
+            );
+        }
+
+        let body = response
+            .into_body()
+            .collect()
+            .await
+            .context("Failed to read attestation response")?
+            .to_bytes();
+
+        let json = String::from_utf8(body.to_vec()).context("Invalid UTF-8 in attestation")?;
+
+        save_attestation(&json, target_domain, "tool")
+    }
 }
 
 #[async_trait]
@@ -107,14 +250,15 @@ impl Prover for ProxyProver {
             }
         }
 
-        let path = request_attestation(&mut sender, config).await?;
+        let path = fetch_attestation_with_censoring(&mut sender, config).await?;
         info!(target: "plain", "Attestation saved to: {}", path.display());
 
         Ok(())
     }
 }
 
-async fn request_attestation(
+/// Fetch attestation for LLM prover (with header censoring for API keys).
+async fn fetch_attestation_with_censoring(
     sender: &mut SendRequest<String>,
     config: &ProveConfig,
 ) -> Result<PathBuf> {
@@ -159,10 +303,10 @@ async fn request_attestation(
 
     let json = String::from_utf8(body.to_vec()).context("Invalid UTF-8 in attestation")?;
 
-    save_attestation(&json, &config.provider.domain)
+    save_attestation(&json, &config.provider.domain, "proxy")
 }
 
-fn save_attestation(json: &str, domain: &str) -> Result<PathBuf> {
+fn save_attestation(json: &str, domain: &str, prefix: &str) -> Result<PathBuf> {
     fs::create_dir_all(PROOFS_DIR)
         .with_context(|| format!("Failed to create {} directory", PROOFS_DIR))?;
 
@@ -172,7 +316,7 @@ fn save_attestation(json: &str, domain: &str) -> Result<PathBuf> {
         .as_secs();
 
     let sanitized_domain = domain.replace([' ', '/', '.'], "_");
-    let path = Path::new(PROOFS_DIR).join(format!("proxy_{sanitized_domain}_{ts}.json"));
+    let path = Path::new(PROOFS_DIR).join(format!("{prefix}_{sanitized_domain}_{ts}.json"));
 
     fs::write(&path, json).context("Failed to write attestation file")?;
 
