@@ -3,6 +3,11 @@
 //! This module provides a client that routes HTTP requests through the
 //! AI Passport proxy server, allowing attestation of external API calls
 //! (e.g., fetching data from Polymarket or price feeds).
+//!
+//! NOTE: This module is currently unused but will be needed when implementing
+//! ProxyTee attestation mode for tools. Kept for future integration.
+
+#![allow(dead_code)]
 
 use anyhow::{Context, Result};
 use http_body_util::BodyExt;

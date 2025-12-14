@@ -1,113 +1,174 @@
 #![feature(assert_matches)]
-
-//! AI Agent with optional attestation support.
+//! VeriTrade - Autonomous AI Trading Agent
 //!
-//! This agent fetches data from external sources (Polymarket, price feeds)
-//! and generates investment decisions. When run with `--attested`, all
-//! external API calls are routed through the attestation proxy for
-//! cryptographic proof generation.
+//! An AI-powered portfolio manager that analyzes market data and makes
+//! trading decisions. Supports multiple attestation modes for verifiable
+//! execution.
 //!
-//! Usage:
-//!   cargo run --bin agent              # Direct mode (no attestation)
-//!   cargo run --bin agent -- --attested  # Attested mode via proxy
+//! # Usage
+//!
+//! ```bash
+//! # Run with default settings (1 round, direct prover)
+//! cargo run -p agent
+//!
+//! # Run with custom settings
+//! cargo run -p agent -- --rounds 3 --round-delay 60
+//!
+//! # Run with TLS notarization (requires notary server)
+//! cargo run -p agent -- --prover tls-single
+//! ```
+//!
+//! # Environment Variables
+//!
+//! - `MODEL_API_DOMAIN`: API domain for the LLM provider (or use --api-domain)
+//! - `MODEL_API_KEY`: API key for authentication
+//! - `MODEL_API_PORT`: API port (default: 443)
+//! - `MODEL_ID`: Model to use
+//! - `AGENT_ROUNDS`: Number of trading rounds (default: 1)
+//! - `AGENT_ROUND_DELAY`: Delay between rounds in seconds (default: 0)
+//! - `POLYMARKET_LIMIT`: Number of markets to fetch (default: 5)
+//! - `PROVER`: Prover type (direct, proxy, tls-single, tls-per-message)
 
-use crate::polymarket::agent_msg::build_polymarket_context;
-use crate::polymarket::fetch::Market;
-use crate::portfolio::fetch::fetch_current;
-use crate::portfolio::price_feed::coingeko::CoingeckoProvider;
-use crate::portfolio::price_feed::context::build_portfolio_context;
-use crate::portfolio::price_feed::enrich::with_prices;
-use crate::utils::logging::init_logging;
-use crate::utils::notary_config::gen_cfg;
-use crate::utils::proxy_client::{ProxyClient, ProxyClientConfig};
-use ai_passport::{with_input_source, DirectProver, Prover, VecInputSource};
-use std::env;
-
-mod decision;
-mod polymarket;
+mod cli;
+mod core;
 mod portfolio;
+mod tools;
 mod utils;
+
+use crate::cli::AgentArgs;
+use crate::core::input_source::AgentInputSource;
+use crate::portfolio::PortfolioState;
+use crate::tools::coingecko::CoinGeckoTool;
+use crate::tools::polymarket::PolymarketTool;
+use crate::tools::portfolio::PortfolioTool;
+use crate::tools::{AttestationMode, Tool};
+use crate::utils::logging::init_logging;
+use ai_passport::{with_input_source, ApiProvider, DirectProver, ProveConfig, Prover, ProverKind};
+use anyhow::Context;
+use clap::Parser;
+use std::env;
+use std::sync::Arc;
+use std::time::Duration;
+use tracing::info;
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
+    // Load .env file
+    let _ = dotenvy::from_filename(".env");
+
+    // Parse CLI arguments first (this handles --help, etc.)
+    let args = AgentArgs::parse();
+
     init_logging();
 
-    // Check for --attested flag
-    let attested_mode = env::args().any(|arg| arg == "--attested");
+    info!("═══════════════════════════════════════════════════════════════");
+    info!("  VeriTrade - Autonomous AI Trading Agent");
+    info!("═══════════════════════════════════════════════════════════════");
 
-    const KIB: usize = 1024;
-    const LIMIT: usize = 14 * KIB;
+    // Load API configuration - domain/port from CLI args, key from environment
+    let api_domain = args.api_domain.clone();
+    let api_port = args.api_port;
+    let api_key = env::var("MODEL_API_KEY")
+        .context("MODEL_API_KEY not set. Please set it to your LLM provider API key.")?;
 
-    // Fetch data - either directly or via proxy for attestation
-    let markets = if attested_mode {
-        println!("Running in ATTESTED mode - fetching data via proxy");
-        fetch_data_attested(3).await?
+    // Build API provider (auto-detects provider type from domain)
+    let api_provider = ApiProvider::builder()
+        .domain(api_domain.clone())
+        .port(api_port)
+        .api_key(api_key)
+        .build()
+        .context("Failed to build ApiProvider")?;
+
+    // Get model ID from args or environment
+    let model_id = args
+        .model_id
+        .or_else(|| env::var("MODEL_ID").ok())
+        .unwrap_or_else(|| {
+            // Default model based on provider
+            if api_domain.contains("anthropic") {
+                "claude-sonnet-4-20250514".to_string()
+            } else {
+                "gpt-4o".to_string()
+            }
+        });
+
+    // Build ProveConfig for the prover
+    let prove_config = ProveConfig::builder()
+        .provider(api_provider)
+        .model_id(model_id.clone())
+        .build()
+        .context("Failed to build ProveConfig")?;
+
+    // Parse round delay
+    let round_delay = if args.round_delay > 0 {
+        Some(Duration::from_secs(args.round_delay))
     } else {
-        println!("Running in DIRECT mode - no attestation");
-        Market::get(3).await?
+        None
     };
 
-    let polymarket_ctx = build_polymarket_context(&markets, 12 * KIB)?;
-    println!("Polymarket context size: {} bytes", polymarket_ctx.len());
+    info!("Configuration:");
+    info!("  API Domain: {}:{}", api_domain, api_port);
+    info!("  Model: {}", model_id);
+    info!("  Prover: {:?}", args.prover);
+    info!("  Rounds: {}", args.rounds);
+    if let Some(delay) = round_delay {
+        info!("  Round delay: {:?}", delay);
+    }
+    info!("  Polymarket markets: {}", args.polymarket_limit);
 
-    let portfolio = fetch_current().await;
-    let provider = CoingeckoProvider::new();
+    // Initialize portfolio with sample positions
+    let portfolio = PortfolioState::sample();
+    info!(
+        "Initial portfolio value: ${:.2}",
+        portfolio.total_value_usd()
+    );
 
-    let priced = with_prices(&portfolio, &provider).await?;
+    // Create tools
+    let tools: Vec<Arc<dyn Tool>> = vec![
+        Arc::new(PortfolioTool::new()),
+        Arc::new(CoinGeckoTool::new()),
+        Arc::new(PolymarketTool::new(args.polymarket_limit)),
+    ];
 
-    let portfolio_ctx = build_portfolio_context(priced, 2 * KIB);
-    println!("Portfolio context size: {} bytes", portfolio_ctx.len());
+    info!(
+        "Tools: {:?}",
+        tools.iter().map(|t| t.name()).collect::<Vec<_>>()
+    );
 
-    let decision_json = decision::build_decision_request(&polymarket_ctx, &portfolio_ctx, LIMIT)?;
-    println!("{decision_json}");
-    println!("Decision request size: {} bytes", decision_json.len());
+    // Create the agent input source
+    let input_source = AgentInputSource::new(
+        portfolio,
+        tools,
+        args.rounds,
+        AttestationMode::Direct, // Tool attestation mode (separate from LLM prover)
+        round_delay,
+    );
 
-    let src = VecInputSource::new(vec![decision_json]);
-    let cfg = gen_cfg(LIMIT, LIMIT + KIB)?;
-    let prover = DirectProver::new();
+    // Create and run the appropriate prover
+    info!("Starting agent with {:?} prover...", args.prover);
 
-    if let Err(e) = with_input_source(src, prover.run(&cfg)).await {
-        eprintln!("Prove failed: {}", e);
-        return Err(e);
+    match args.prover {
+        ProverKind::Direct => {
+            let prover = DirectProver::new();
+            with_input_source(input_source, prover.run(&prove_config)).await?;
+        }
+        ProverKind::Proxy => {
+            // TODO: Implement proxy prover support
+            anyhow::bail!(
+                "Proxy prover not yet implemented for agent. Use --prover direct for now."
+            );
+        }
+        ProverKind::TlsSingleShot => {
+            // TODO: Implement TLS single-shot prover support
+            anyhow::bail!("TLS single-shot prover not yet implemented for agent. Use --prover direct for now.");
+        }
+        ProverKind::TlsPerMessage => {
+            // TODO: Implement TLS per-message prover support
+            anyhow::bail!("TLS per-message prover not yet implemented for agent. Use --prover direct for now.");
+        }
     }
 
-    println!("Success!");
+    info!("Agent completed successfully.");
 
     Ok(())
-}
-
-/// Fetch all external data through the attestation proxy.
-///
-/// This creates a single proxy connection, fetches all required data,
-/// and then requests an attestation covering all the API calls.
-async fn fetch_data_attested(market_limit: usize) -> anyhow::Result<Vec<Market>> {
-    // Get proxy config from environment or use defaults
-    let proxy_config = ProxyClientConfig {
-        host: env::var("PROXY_HOST").unwrap_or_else(|_| "localhost".to_string()),
-        port: env::var("PROXY_PORT")
-            .ok()
-            .and_then(|p| p.parse().ok())
-            .unwrap_or(8443),
-    };
-
-    println!(
-        "Connecting to proxy at {}:{}",
-        proxy_config.host, proxy_config.port
-    );
-
-    let mut proxy = ProxyClient::new(proxy_config);
-    proxy.connect().await?;
-
-    // Fetch markets through the proxy
-    let markets = Market::get_via_proxy(&mut proxy, market_limit).await?;
-    println!("Fetched {} markets via proxy", markets.len());
-
-    // Request attestation for all the API calls made
-    let attestation_path = proxy.request_attestation(Market::api_domain()).await?;
-    println!(
-        "Data fetch attestation saved to: {}",
-        attestation_path.display()
-    );
-
-    Ok(markets)
 }
