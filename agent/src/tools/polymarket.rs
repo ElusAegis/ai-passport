@@ -1,6 +1,6 @@
 //! Polymarket data fetcher tool.
 
-use super::{AttestationMode, Tool, ToolOutput};
+use super::{Tool, ToolAttestationMode, ToolOutput};
 use crate::portfolio::PortfolioState;
 use crate::utils::serialization::{de_opt_f64, de_vec_string_flexible};
 use ai_passport::{ProxyConfig, ProxyProver};
@@ -172,17 +172,14 @@ impl Tool for PolymarketTool {
 
     async fn fetch(
         &self,
-        mode: &AttestationMode,
+        mode: &ToolAttestationMode,
         _portfolio: &PortfolioState,
     ) -> Result<ToolOutput> {
         let start = Instant::now();
 
         let markets = match mode {
-            AttestationMode::Direct => self.fetch_direct().await?,
-            AttestationMode::ProxyTee { host, port } => self.fetch_proxy(host, *port).await?,
-            _ => {
-                anyhow::bail!("Other modes are not yet implemented for Polymarket")
-            }
+            ToolAttestationMode::Direct => self.fetch_direct().await?,
+            ToolAttestationMode::Proxy { host, port } => self.fetch_proxy(host, *port).await?,
         };
 
         let data = self.build_context(&markets)?;
@@ -248,7 +245,7 @@ mod tests {
         let tool = PolymarketTool::new(3, false);
         let portfolio = PortfolioState::default();
 
-        let result = tool.fetch(&AttestationMode::Direct, &portfolio).await;
+        let result = tool.fetch(&ToolAttestationMode::Direct, &portfolio).await;
 
         // This test requires network access
         if let Ok(output) = result {

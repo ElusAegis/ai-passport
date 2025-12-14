@@ -35,13 +35,13 @@ mod portfolio;
 mod tools;
 mod utils;
 
-use crate::cli::AgentArgs;
+use crate::cli::{AgentArgs, ToolAttestationKind};
 use crate::core::input_source::AgentInputSource;
 use crate::portfolio::PortfolioState;
 use crate::tools::coingecko::CoinGeckoTool;
 use crate::tools::polymarket::PolymarketTool;
 use crate::tools::portfolio::PortfolioTool;
-use crate::tools::{AttestationMode, Tool};
+use crate::tools::{Tool, ToolAttestationMode};
 use crate::utils::logging::init_logging;
 use ai_passport::{
     with_input_source, ApiProvider, DirectProver, NetworkSetting, NotaryConfig, NotaryMode,
@@ -151,6 +151,19 @@ async fn main() -> anyhow::Result<()> {
     if args.polymarket_random_page {
         info!("  Polymarket random pagination: enabled (pages 0-4)");
     }
+    info!("  Tool attestation: {:?}", args.tool_attestation);
+
+    // Convert tool attestation kind to mode (with proxy config if needed)
+    let tool_attestation = match args.tool_attestation {
+        ToolAttestationKind::Direct => ToolAttestationMode::Direct,
+        ToolAttestationKind::Proxy => {
+            let proxy = proxy_tee_config();
+            ToolAttestationMode::Proxy {
+                host: proxy.host,
+                port: proxy.port,
+            }
+        }
+    };
 
     // Initialize portfolio with sample positions
     let portfolio = PortfolioState::sample();
@@ -163,7 +176,10 @@ async fn main() -> anyhow::Result<()> {
     let tools: Vec<Arc<dyn Tool>> = vec![
         Arc::new(PortfolioTool::new()),
         Arc::new(CoinGeckoTool::new()),
-        Arc::new(PolymarketTool::new(args.polymarket_limit, args.polymarket_random_page)),
+        Arc::new(PolymarketTool::new(
+            args.polymarket_limit,
+            args.polymarket_random_page,
+        )),
     ];
 
     info!(
@@ -176,7 +192,7 @@ async fn main() -> anyhow::Result<()> {
         portfolio,
         tools,
         args.rounds,
-        AttestationMode::Direct, // Tool attestation mode (separate from LLM prover)
+        tool_attestation,
         round_delay,
     );
 

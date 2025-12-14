@@ -1,6 +1,6 @@
 //! CoinGecko price feed tool.
 
-use super::{AttestationMode, Tool, ToolOutput};
+use super::{Tool, ToolAttestationMode, ToolOutput};
 use crate::portfolio::PortfolioState;
 use ai_passport::{ProxyConfig, ProxyProver};
 use anyhow::{Context, Result};
@@ -286,7 +286,7 @@ impl Tool for CoinGeckoTool {
 
     async fn fetch(
         &self,
-        mode: &AttestationMode,
+        mode: &ToolAttestationMode,
         portfolio: &PortfolioState,
     ) -> Result<ToolOutput> {
         let start = Instant::now();
@@ -295,12 +295,9 @@ impl Tool for CoinGeckoTool {
         let symbols: Vec<String> = portfolio.symbols().into_iter().collect();
 
         let prices = match mode {
-            AttestationMode::Direct => self.fetch_direct(&symbols).await?,
-            AttestationMode::ProxyTee { host, port } => {
+            ToolAttestationMode::Direct => self.fetch_direct(&symbols).await?,
+            ToolAttestationMode::Proxy { host, port } => {
                 self.fetch_proxy(&symbols, host, *port).await?
-            }
-            _ => {
-                anyhow::bail!("Other modes not yet implemented for CoinGecko")
             }
         };
 

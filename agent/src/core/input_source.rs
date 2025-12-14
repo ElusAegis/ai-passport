@@ -10,7 +10,7 @@
 //! 4. Executes trades on the portfolio
 
 use crate::portfolio::PortfolioState;
-use crate::tools::{AttestationMode, Tool, ToolOutput};
+use crate::tools::{Tool, ToolAttestationMode, ToolOutput};
 use ai_passport::{ChannelBudget, ChatMessage, InputSource, ProveConfig};
 use anyhow::{Context, Result};
 use std::sync::Arc;
@@ -32,7 +32,7 @@ pub struct AgentInputSource {
     /// Tools for fetching data
     tools: Vec<Arc<dyn Tool>>,
     /// Attestation mode for tools
-    tool_attestation: AttestationMode,
+    tool_attestation: ToolAttestationMode,
     /// Optional delay between rounds
     round_delay: Option<Duration>,
     /// Whether this is the first message (needs system prompt context)
@@ -47,7 +47,7 @@ impl AgentInputSource {
         portfolio: PortfolioState,
         tools: Vec<Arc<dyn Tool>>,
         max_rounds: usize,
-        tool_attestation: AttestationMode,
+        tool_attestation: ToolAttestationMode,
         round_delay: Option<Duration>,
     ) -> Self {
         Self {
@@ -245,7 +245,7 @@ mod tests {
     fn test_agent_input_source_creation() {
         let portfolio = PortfolioState::sample();
         let tools: Vec<Arc<dyn Tool>> = vec![];
-        let source = AgentInputSource::new(portfolio, tools, 3, AttestationMode::Direct, None);
+        let source = AgentInputSource::new(portfolio, tools, 3, ToolAttestationMode::Direct, None);
 
         assert_eq!(source.round, 0);
         assert_eq!(source.max_rounds, 3);

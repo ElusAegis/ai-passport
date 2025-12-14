@@ -8,6 +8,16 @@ use clap::{Parser, ValueHint};
 /// Default prover type - direct mode for testing without proofs
 pub const DEFAULT_PROVER: &str = "direct";
 
+/// Tool attestation kind (simpler than ProverKind - only direct or proxy)
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub enum ToolAttestationKind {
+    /// Direct API calls, no attestation
+    #[default]
+    Direct,
+    /// Route through TEE proxy for attestation
+    Proxy,
+}
+
 /// VeriTrade - Autonomous AI Trading Agent
 ///
 /// An AI-powered portfolio manager that analyzes market data and makes
@@ -75,6 +85,17 @@ pub struct AgentArgs {
         default_value = DEFAULT_PROVER
     )]
     pub prover: ProverKind,
+
+    /// Attestation mode for tool data fetching (Polymarket, CoinGecko).
+    /// - direct: fetch directly without attestation
+    /// - proxy: route through TEE proxy for attestation
+    #[arg(
+        long = "tool-attestation",
+        env = "TOOL_ATTESTATION",
+        value_parser = parse_tool_attestation_kind,
+        default_value = "direct"
+    )]
+    pub tool_attestation: ToolAttestationKind,
 }
 
 /// Parse prover kind from string (mirrors CLI crate's parser).
@@ -88,6 +109,18 @@ fn parse_prover_kind(s: &str) -> Result<ProverKind, String> {
         "multi" => Ok(ProverKind::TlsPerMessage),
         other => Err(format!(
             "invalid PROVER '{}'; expected one of: direct, proxy, tls-single, tls-per-message",
+            other
+        )),
+    }
+}
+
+/// Parse tool attestation kind from string.
+fn parse_tool_attestation_kind(s: &str) -> Result<ToolAttestationKind, String> {
+    match s.trim().to_ascii_lowercase().as_str() {
+        "direct" | "none" => Ok(ToolAttestationKind::Direct),
+        "proxy" | "proxy-tee" | "tee" => Ok(ToolAttestationKind::Proxy),
+        other => Err(format!(
+            "invalid TOOL_ATTESTATION '{}'; expected one of: direct, proxy",
             other
         )),
     }

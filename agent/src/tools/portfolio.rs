@@ -10,7 +10,7 @@
 //! - Reading token balances from the agent's wallet address
 //! - Converting on-chain balances to the PortfolioState format
 
-use super::{AttestationMode, Tool, ToolOutput};
+use super::{Tool, ToolAttestationMode, ToolOutput};
 use crate::portfolio::PortfolioState;
 use anyhow::{Context, Result};
 use async_trait::async_trait;
@@ -76,7 +76,7 @@ impl Tool for PortfolioTool {
 
     async fn fetch(
         &self,
-        _mode: &AttestationMode,
+        _mode: &ToolAttestationMode,
         portfolio: &PortfolioState,
     ) -> Result<ToolOutput> {
         let start = Instant::now();
@@ -132,7 +132,7 @@ mod tests {
 
         let tool = PortfolioTool::new();
         let output = tool
-            .fetch(&AttestationMode::Direct, &portfolio)
+            .fetch(&ToolAttestationMode::Direct, &portfolio)
             .await
             .unwrap();
 

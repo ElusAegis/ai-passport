@@ -11,18 +11,14 @@ use crate::portfolio::PortfolioState;
 use anyhow::Result;
 use async_trait::async_trait;
 
-/// Attestation mode for tool/LLM calls.
+/// Attestation mode for tool data fetching.
 #[derive(Debug, Clone, Default)]
-pub enum AttestationMode {
+pub enum ToolAttestationMode {
     /// Direct API calls, no attestation
     #[default]
     Direct,
-    /// Route through TEE proxy
-    ProxyTee { host: String, port: u16 },
-    /// Use TLSNotary for attestation
-    TlsNotary {
-        // Will add config later
-    },
+    /// Route through TEE proxy for attestation
+    Proxy { host: String, port: u16 },
 }
 
 /// Output from a tool fetch operation.
@@ -45,10 +41,13 @@ pub trait Tool: Send + Sync {
     /// Fetch data from the tool.
     ///
     /// The `mode` parameter determines how the fetch is performed
-    /// (direct, via proxy-TEE, or via TLSNotary).
+    /// (direct or via proxy-TEE).
     ///
     /// The `portfolio` parameter provides access to current holdings
     /// for tools that need it (e.g., price feed needs to know which assets).
-    async fn fetch(&self, mode: &AttestationMode, portfolio: &PortfolioState)
-        -> Result<ToolOutput>;
+    async fn fetch(
+        &self,
+        mode: &ToolAttestationMode,
+        portfolio: &PortfolioState,
+    ) -> Result<ToolOutput>;
 }
